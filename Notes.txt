@@ -1,0 +1,12 @@
+
+
+
+Tracker.py will track all videos and return list of feature objects in each frame
+
+Kalman.py will take in results from Tracker.py and will do data association to return list of trajectories observed.
+Will only work on 2D images for right now. Based loosely on floris vb's code.
+
+In Associator loop
+
+1. From objects that are currently being tracked, update kalman filter prediction for each object.
+2. Do data association based on the error estimates from the kalman filter
