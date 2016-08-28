@@ -11,15 +11,17 @@ import opencv_helper.opencv_helper as cvhlp
 
 class Tracker:
 
-    def __init__(self, videoname, ROI = None):
+    def __init__(self, videoname, ROI = None, verbose = False):
+
+        self.verbose = verbose
 
         self.videoname = videoname
         self.vid = cv.VideoCapture(self.videoname)
 
         self.file_path = os.path.dirname(self.videoname)
-        self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '.txt'
+        self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_contours.txt'
         self.out_file = os.path.join(self.file_path, self.file_name)
-        self.file_exists = (len(glob.glob(self.out_file)) == 0)
+        self.file_exists = (len(glob.glob(self.out_file)) == [])
 
         self.NumFrames = self.vid.get(cv.CAP_PROP_FRAME_COUNT)
         self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
@@ -33,7 +35,8 @@ class Tracker:
             self.ROI = ROI
             self.ROI_Width = self.ROI[3] - self.ROI[1]
             self.ROI_Height = self.ROI[2] - self.ROI[0]
-            print(self.ROI_Height, self.ROI_Width)
+            if self.verbose:
+                print(self.ROI_Height, self.ROI_Width)
 
         self.threshold_val = 0.7
         self.bkg_method = 'Divide'
@@ -50,7 +53,8 @@ class Tracker:
         self.load_video()
 
     def load_video(self):
-        print("Loading")
+        if self.verbose:
+            print("Loading")
 
         self.vid.set(cv.CAP_PROP_POS_FRAMES,0)
 
@@ -58,7 +62,7 @@ class Tracker:
             tru, ret = self.vid.read(1)
             self.frames[kk, :, :] = ret[self.ROI[0]:self.ROI[2], self.ROI[1]:self.ROI[3], 0] # assumes loading color
 
-            if (kk % 100) == 0:
+            if ((kk % 100) == 0) and self.verbose:
                 print(kk)
 
         self.loaded = True
@@ -68,24 +72,29 @@ class Tracker:
         self.background = np.float64(np.median(self.frames[0:self.bkg_sep:,:,:], axis = 0))
         # add a small number to background to not have divide by zeros for division
         self.background = self.background + np.float64(1E-6)
-
-        print('BKG')
+        if self.verbose:
+            print('BKG')
 
     def remove_background(self):
         if self.bkg_method == 'Divide':
             self.frames_normed = self.frames / self.background     # broadcasting !!
         else:
             self.frames_normed = self.frames - self.background     # broadcasting !!
-        print('NORM')
+
+        if self.verbose:
+            print('NORM')
 
     def threshold(self):
 
         self.frames_BW = self.frames_normed < self.threshold_val
 
-        print('Threshold')
+        if self.verbose:
+            print('Threshold')
 
     def find_objects(self):
-        print('Tracking')
+        if self.verbose:
+            print('Tracking')
+
         self.contours = []
 
         if self.trk_method == 'sklearn':
