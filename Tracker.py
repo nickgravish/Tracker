@@ -9,6 +9,11 @@ import os
 import glob
 import opencv_helper.opencv_helper as cvhlp
 
+import pyqtgraph as pg
+from Tracker.Visualize import VideoStreamView
+from pyqtgraph.Qt import QtCore, QtGui
+
+
 class Tracker:
 
     def __init__(self, videoname, ROI = None, verbose = False):
@@ -16,32 +21,71 @@ class Tracker:
         self.verbose = verbose
 
         self.videoname = videoname
-        self.vid = cv.VideoCapture(self.videoname)
 
         self.file_path = os.path.dirname(self.videoname)
         self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_contours.txt'
         self.out_file = os.path.join(self.file_path, self.file_name)
-        self.file_exists = (len(glob.glob(self.out_file)) == [])
-
-        self.NumFrames = self.vid.get(cv.CAP_PROP_FRAME_COUNT)
-        self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
-        self.Width = self.vid.get(cv.CAP_PROP_FRAME_WIDTH)
-
-        if ROI is None:
-            self.ROI = (0, 0, self.Width, self.Height)
-            self.ROI_Width = self.Width
-            self.ROI_Height = self.Height
-        else:
-            self.ROI = ROI
-            self.ROI_Width = self.ROI[3] - self.ROI[1]
-            self.ROI_Height = self.ROI[2] - self.ROI[0]
-            if self.verbose:
-                print(self.ROI_Height, self.ROI_Width)
+        self.file_exists = (glob.glob(self.out_file) != [])
 
         self.threshold_val = 0.7
         self.bkg_method = 'Divide'
         self.trk_method = 'opencv'
         self.bkg_sep = 100
+
+        self.ROI = ROI
+
+    def load_data(self):
+        with open(self.out_file, 'r') as infile:
+            tmp = json.load(infile)
+
+        # load in contours
+        self.contours = tmp['contours']
+
+        # convert to the opencv format
+        # tmp = []
+        # for frame in self.contours:
+        #     c = []
+        #     for contour in frame:
+        #         c.append(cvhlp.list_to_opencv_contours(contour))
+        #     tmp.append(c)
+
+
+        self.header = tmp['header']
+
+        self.ROI = self.header['ROI']
+        self.ROI_Width = self.ROI[3] - self.ROI[1]
+        self.ROI_Height = self.ROI[2] - self.ROI[0]
+
+        self.bkg_method = self.header['bkg_method']
+        self.trk_method = self.header['trk_method']
+        self.bkg_sep = self.header['bkg_sep']
+
+    def load_video(self):
+        if self.verbose:
+            print("Loading")
+
+        self.vid = cv.VideoCapture(self.videoname)
+
+        self.NumFrames = self.vid.get(cv.CAP_PROP_FRAME_COUNT)
+        self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
+        self.Width = self.vid.get(cv.CAP_PROP_FRAME_WIDTH)
+
+
+        # if already tracked, load in the data
+        if self.file_exists:  # load in contours to associate
+            self.load_data()
+
+        else:
+            if self.ROI is None:
+                self.ROI = (0, 0, self.Width, self.Height)
+                self.ROI_Width = self.Width
+                self.ROI_Height = self.Height
+            else:
+                self.ROI_Width = self.ROI[3] - self.ROI[1]
+                self.ROI_Height = self.ROI[2] - self.ROI[0]
+
+                if self.verbose:
+                    print(self.ROI_Height, self.ROI_Width)
 
         self.frames = np.zeros((self.NumFrames, self.ROI_Height, self.ROI_Width), np.uint8)
         self.background = None
@@ -49,12 +93,6 @@ class Tracker:
         self.frames_BW = None
 
         self.loaded = False
-
-        self.load_video()
-
-    def load_video(self):
-        if self.verbose:
-            print("Loading")
 
         self.vid.set(cv.CAP_PROP_POS_FRAMES,0)
 
@@ -157,6 +195,24 @@ class Tracker:
                         sort_keys=True,
                         indent=4)
 
+    def visualize(self):
+        self.frames_contours = self.frames.copy()
+
+        for frame, contours in zip(self.frames_contours, self.frames_objs):
+            cv.drawContours(frame, contours, -1, (255,0,0))
+
+        w = QtGui.QWidget()
+        w.resize(1200, 600)
+        w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
+
+        v = VideoStreamView(self.frames_contours, transpose=True)
+
+        layout = QtGui.QGridLayout()
+        w.setLayout(layout)
+        layout.addWidget(v)
+
+        w.show()
+        QtGui.QApplication.instance().exec_()
 
 
 if __name__ == '__main__':

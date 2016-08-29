@@ -1,7 +1,7 @@
 
 import Tracker
 import numpy as np
-import Kalman
+import Tracker.Kalman as Kalman
 import json
 
 
@@ -78,7 +78,9 @@ class DataAssociator():
         # load in contours to associate
         self.filename = filename
         with open(self.filename, 'r') as infile:
-            self.frame_contours = json.load(infile)
+            tmp = json.load(infile)
+            self.frame_contours = tmp['contours']
+            self.header = tmp['header']
 
         self.frame_objects = []
 

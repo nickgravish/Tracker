@@ -24,10 +24,18 @@ class VideoStreamView(pg.ImageView):
 
         self.video = video
         self.transpose = transpose
-        self.NumFrames = self.video.getNumFrames()
-        self.Height = self.video.getHeight()
-        self.Width = self.video.getWidth()
-pg.PlotItem
+
+        if type(video) == np.ndarray:
+            self.video = video
+            self.Height, self.Width , self.NumFrames = self.video.shape
+            self.is_array = True
+
+        else:
+            self.NumFrames = self.video.getNumFrames()
+            self.Height = self.video.getHeight()
+            self.Width = self.video.getWidth()
+            self.is_array = False
+
         self.image = None
         self.loadFrame(1)
         self.setImage(self.image)
@@ -40,16 +48,16 @@ pg.PlotItem
             self.addPlot()
 
 
-    def addPlot(self):
-        x = []
-        y = []
-
-        for frm in self.tracked_data:
-            for trk in frm:
-                x.append(trk['x'])
-                y.append(trk['y'])
-
-        self.view.addItem(pg.PlotItem.plot(x,y,symbol = 'o', pen=None))
+    # def addPlot(self):
+    #     x = []
+    #     y = []
+    #
+    #     for frm in self.tracked_data:
+    #         for trk in frm:
+    #             x.append(trk['x'])
+    #             y.append(trk['y'])
+    #
+    #     self.view.addItem(pg.PlotItem.plot(x,y,symbol = 'o', pen=None))
 
     def wheelEvent(self, ev):
         sc = ev.delta()
@@ -57,7 +65,10 @@ pg.PlotItem
 
     def loadFrame(self, index):
 
-        img = self.video.getFrame(index)
+        if self.is_array:
+            img = self.video[:,:,index]
+        else:
+            img = self.video.getFrame(index)
 
         if self.transpose:
             img = img.T
