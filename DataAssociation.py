@@ -1,9 +1,19 @@
 
 import Tracker
 import numpy as np
-import Tracker.Kalman as Kalman
+
+import sys
+import os
+import glob
+
+sys.path.append('/Users/nickgravish/Dropbox/Python/')
+import Kalman as Kalman
 import json
 
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore, QtGui
+
+from Visualize import VideoStreamView
 
 class KalmanParameters():
     def __init__(self):
@@ -75,9 +85,14 @@ class DataAssociator():
 
         self.init_kalman_parameters()
 
-        # load in contours to associate
-        self.filename = filename
-        with open(self.filename, 'r') as infile:
+        self.videoname = filename
+
+        self.file_path = os.path.dirname(self.videoname)
+        self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_contours.txt'
+        self.out_file = os.path.join(self.file_path, self.file_name)
+        self.file_exists = (glob.glob(self.out_file) != [])
+
+        with open(self.out_file, 'r') as infile:
             tmp = json.load(infile)
             self.frame_contours = tmp['contours']
             self.header = tmp['header']
@@ -401,6 +416,52 @@ class DataAssociator():
             self.frame_objects.append(self.return_frame_based_tracked(self.tracked_objects))
             # print(frame)
 
+    def visualize(self):
+
+        self.tracker = Tracker.Tracker(self.videoname, ROI=(30, 30, 550, 1174), verbose='True')
+        self.tracker.load_video()
+        self.tracker.draw_contours()
+
+        app = QtGui.QApplication([])
+
+        w = pg.GraphicsView()
+        w.show()
+        w.resize(1200, 600)
+        w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
+
+        view = pg.ViewBox()
+        w.setCentralItem(view)
+
+        ## lock the aspect ratio
+        view.setAspectLocked(True)
+
+        ## Create image item
+        img = VideoStreamView(self.tracker.frames_contours, transpose=True)
+        view.addItem(img)
+
+        plt = pg.plot([1, 5, 2, 4, 3, 2], pen='r')
+
+        # add an image, scaled
+        # img.scale(0.2, 0.1)
+        # img.setZValue(-100)
+        plt.addItem(img)
+
+
+
+
+        # w = QtGui.QWidget()
+        # w.resize(1200, 600)
+        # w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
+        #
+        # v = VideoStreamView(self.frames_contours, transpose=True)
+        #
+        # layout = QtGui.QGridLayout()
+        # w.setLayout(layout)
+        # layout.addWidget(v)
+        #
+        # w.show()
+        QtGui.QApplication.instance().exec_()
+
 
 if __name__ == '__main__':
     import matplotlib
@@ -408,9 +469,11 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
 
-    file = '/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/2016-08-05_12.41.20/1_08-05-16_12-41-31.770_Fri_Aug_05_12-41-20.543_115.txt'
-    data = DataAssociator(filename = file)
+    file = '/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/' \
+           'Bee_experiments_2016/2016-08-15_13.05.57/' \
+           '1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
+
+    data = DataAssociator(filename=file)
     data.run()
-
-
+    data.visualize()
 

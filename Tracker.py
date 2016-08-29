@@ -7,10 +7,13 @@ from skimage.measure import label, regionprops
 import json
 import os
 import glob
+import sys
+
+sys.path.append('/Users/nickgravish/Dropbox/Python/')
 import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
-from Tracker.Visualize import VideoStreamView
+from Visualize import VideoStreamView
 from pyqtgraph.Qt import QtCore, QtGui
 
 
@@ -21,6 +24,7 @@ class Tracker:
         self.verbose = verbose
 
         self.videoname = videoname
+
 
         self.file_path = os.path.dirname(self.videoname)
         self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_contours.txt'
@@ -36,21 +40,22 @@ class Tracker:
 
     def load_data(self):
         with open(self.out_file, 'r') as infile:
-            tmp = json.load(infile)
+            data_file = json.load(infile)
 
         # load in contours
-        self.contours = tmp['contours']
+        self.contours = data_file['contours']
 
         # convert to the opencv format
-        # tmp = []
-        # for frame in self.contours:
-        #     c = []
-        #     for contour in frame:
-        #         c.append(cvhlp.list_to_opencv_contours(contour))
-        #     tmp.append(c)
+        tmp = []
+        for frame in self.contours:
+            c = []
+            for contour in frame:
+                c.append(cvhlp.list_to_opencv_contours(contour['contours']))
+            tmp.append(c)
 
+        self.raw_contours = tmp
 
-        self.header = tmp['header']
+        self.header = data_file['header']
 
         self.ROI = self.header['ROI']
         self.ROI_Width = self.ROI[3] - self.ROI[1]
@@ -136,7 +141,7 @@ class Tracker:
         self.contours = []
 
         if self.trk_method == 'sklearn':
-            self.frames_objs = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
+            self.raw_contours = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
             for objects in self.frames_objs:
                 data = []
 
@@ -160,9 +165,9 @@ class Tracker:
                 self.contours.append(data)
 
         elif self.trk_method == 'opencv':
-            self.frames_objs = [cv.findContours(np.uint8(frame), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[1] for frame in self.frames_BW]
+            self.raw_contours = [cv.findContours(np.uint8(frame), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[1] for frame in self.frames_BW]
 
-            for objects in self.frames_objs:
+            for objects in self.raw_contours:
                 data = []
 
                 for object in objects:
@@ -195,12 +200,21 @@ class Tracker:
                         sort_keys=True,
                         indent=4)
 
-    def visualize(self):
+
+    def draw_contours(self):
         self.frames_contours = self.frames.copy()
 
-        for frame, contours in zip(self.frames_contours, self.frames_objs):
-            cv.drawContours(frame, contours, -1, (255,0,0))
+        for frame, contours in zip(self.frames_contours, self.raw_contours):
+            cv.drawContours(frame, contours, -1, (255, 0, 0))
 
+    def visualize(self):
+
+        self.draw_contours()
+
+        if self.verbose:
+            print('visualizing')
+
+        app = QtGui.QApplication([])
         w = QtGui.QWidget()
         w.resize(1200, 600)
         w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
@@ -220,21 +234,21 @@ if __name__ == '__main__':
     matplotlib.use('Qt4Agg')
 
     import matplotlib.pyplot as plt
-    from time import time
 
-
-
-    start = time()
-
-    vidlist = ['/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/2016-08-05_12.41.20/1_08-05-16_12-41-31.770_Fri_Aug_05_12-41-20.543_115.mp4']
+    file = '/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/' \
+           'Bee_experiments_2016/2016-08-15_13.05.57/' \
+           '1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
 
     # Load in images to memory during construction
-    video = Tracker(vidlist[0], ROI= (30, 30, 550, 1150))
+    video = Tracker(file, ROI=(30, 30, 550, 1174), verbose='True')
 
-    video.compute_background()          # form background image
-    video.remove_background()           # remove background
-    video.threshold()                   # threshold to segment features
-    video.find_objects('opencv')
 
+    video.load_video()
+    # video.compute_background()  # form background image
+    # video.remove_background()  # remove background
+    # video.threshold()  # threshold to segment features
+    # video.find_objects()
+
+    video.visualize()
 
 

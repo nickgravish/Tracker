@@ -66,7 +66,7 @@ class VideoStreamView(pg.ImageView):
     def loadFrame(self, index):
 
         if self.is_array:
-            img = self.video[:,:,index]
+            img = self.video[index, :,:]
         else:
             img = self.video.getFrame(index)
 
