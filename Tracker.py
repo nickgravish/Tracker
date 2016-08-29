@@ -13,7 +13,7 @@ sys.path.append('/Users/nickgravish/Dropbox/Python/')
 import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
-from Visualize import VideoStreamView
+from Tracker.Visualize import VideoStreamView
 from pyqtgraph.Qt import QtCore, QtGui
 
 
@@ -75,7 +75,6 @@ class Tracker:
         self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
         self.Width = self.vid.get(cv.CAP_PROP_FRAME_WIDTH)
 
-
         # if already tracked, load in the data
         if self.file_exists:  # load in contours to associate
             self.load_data()
@@ -100,9 +99,18 @@ class Tracker:
         self.loaded = False
 
         self.vid.set(cv.CAP_PROP_POS_FRAMES,0)
+        if not (self.NumFrames > 0):
+            self.exit_error()
+            raise IOError('Codec issue: cannot read number of frames.')
 
         for kk in range(int(self.NumFrames)):
             tru, ret = self.vid.read(1)
+
+            # check if video frames are being loaded
+            if not tru:
+                self.exit_error()
+                raise IOError('Codec issue: cannot load frames.')
+
             self.frames[kk, :, :] = ret[self.ROI[0]:self.ROI[2], self.ROI[1]:self.ROI[3], 0] # assumes loading color
 
             if ((kk % 100) == 0) and self.verbose:
@@ -110,6 +118,9 @@ class Tracker:
 
         self.loaded = True
 
+    def exit_error(self):
+        self.contours = -1
+        self.save_JSON()
 
     def compute_background(self):
         self.background = np.float64(np.median(self.frames[0:self.bkg_sep:,:,:], axis = 0))
@@ -244,10 +255,10 @@ if __name__ == '__main__':
 
 
     video.load_video()
-    # video.compute_background()  # form background image
-    # video.remove_background()  # remove background
-    # video.threshold()  # threshold to segment features
-    # video.find_objects()
+    video.compute_background()  # form background image
+    video.remove_background()  # remove background
+    video.threshold()  # threshold to segment features
+    video.find_objects()
 
     video.visualize()
 
