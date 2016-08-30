@@ -14,10 +14,15 @@ import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
 from Tracker.Visualize import VideoStreamView
+from Tracker.DataAssociation import DataAssociator
+
 from pyqtgraph.Qt import QtCore, QtGui
 
+import copy
 
 class Tracker:
+
+#TODO add an open command to open the test folder
 
     def __init__(self, videoname, ROI = None, verbose = False):
 
@@ -25,13 +30,19 @@ class Tracker:
 
         self.videoname = videoname
 
-
         self.file_path = os.path.dirname(self.videoname)
+        # contours file
         self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_contours.txt'
         self.out_file = os.path.join(self.file_path, self.file_name)
         self.file_exists = (glob.glob(self.out_file) != [])
 
-        self.threshold_val = 0.7
+        # association file
+        self.file_name_assoc = os.path.splitext(os.path.basename(self.videoname))[0] + '_tracks.txt'
+        self.out_file_assoc = os.path.join(self.file_path, self.file_name_assoc)
+        self.file_exists_assoc = (glob.glob(self.out_file_assoc) != [])
+
+
+        self.threshold_val = 0.8
         self.bkg_method = 'Divide'
         self.trk_method = 'opencv'
         self.bkg_sep = 100
@@ -64,6 +75,31 @@ class Tracker:
         self.bkg_method = self.header['bkg_method']
         self.trk_method = self.header['trk_method']
         self.bkg_sep = self.header['bkg_sep']
+
+    def associate_contours(self,
+                           max_covariance=30,
+                           max_velocity=10,
+                           n_covariances_to_reject=3,
+                           max_tracked_objects=100,
+                           kalman_state_cov=0.2,
+                           kalman_init_cov=10,
+                           kalman_measurement_cov=50):
+
+        tmp = DataAssociator(self.videoname,
+                             max_covariance = max_covariance,
+                             max_velocity = max_velocity,
+                             n_covariances_to_reject = n_covariances_to_reject,
+                             max_tracked_objects = max_tracked_objects,
+                             kalman_measurement_cov = kalman_measurement_cov,
+                             kalman_init_cov = kalman_init_cov,
+                             kalman_state_cov = kalman_state_cov)
+        tmp.run()
+
+        self.frames_tracks = tmp.frame_objects
+        self.objects = tmp.objects
+
+        del tmp
+
 
     def load_video(self):
         if self.verbose:
@@ -131,7 +167,10 @@ class Tracker:
 
     def remove_background(self):
         if self.bkg_method == 'Divide':
-            self.frames_normed = self.frames / self.background     # broadcasting !!
+            norm_bkg = np.mean(self.background[:]) # normalize for mean intensity of image
+            norm_frm = np.mean(self.frames, axis=(1,2)) # normalize for mean intensity of current frame. For flicker
+            self.frames_normed = (self.frames / norm_bkg) / (self.background / norm_bkg)    # broadcasting !!
+
         else:
             self.frames_normed = self.frames - self.background     # broadcasting !!
 
@@ -139,8 +178,14 @@ class Tracker:
             print('NORM')
 
     def threshold(self):
-
         self.frames_BW = self.frames_normed < self.threshold_val
+
+        if self.verbose:
+            print('Threshold')
+
+    def morpho_closing(self, kernel_size = 5):
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        self.frames_BW = [cv.morphologyEx(np.uint8(frm), cv.MORPH_CLOSE, kernel) for frm in self.frames_BW]
 
         if self.verbose:
             print('Threshold')
@@ -211,33 +256,70 @@ class Tracker:
                         sort_keys=True,
                         indent=4)
 
+    def save_association_JSON(self):
+        # need to save two lists, frames_tracks, and objects
+        tmp_tracks = copy.deepcopy(self.frames_tracks)
+        for frm in tmp_tracks:
+            for obj in frm:
+                obj['measurements'] = obj['measurements'].tolist()
+                obj['xy_cov_matrix'] = obj['xy_cov_matrix'].tolist()
+
+        tmp_objs = copy.deepcopy(self.objects)
+        for kk, obj in tmp_objs.items():
+            obj['x'] = obj['x'].tolist()
+            obj['y'] = obj['y'].tolist()
+            obj['vy'] = obj['vy'].tolist()
+            obj['vx'] = obj['vx'].tolist()
+            obj['area'] = obj['area'].tolist()
+            obj['error'] = obj['error'].tolist()
+            obj['angle'] = obj['angle'].tolist()
+            obj['frames'] = obj['frames'].tolist()
+            obj['measurements'] = obj['measurements'].tolist()
+            obj['xy_cov_matrix'] = [o.tolist() for o in obj['xy_cov_matrix']]
+
+        # a hack right now
+        with open(self.out_file_assoc, 'w+') as output:
+            json.dump({'tracks': tmp_tracks,
+                       'objects': tmp_objs},
+                      output,
+                      sort_keys=True,
+                      indent=4)
+
 
     def draw_contours(self):
-        self.frames_contours = self.frames.copy()
+            self.frames_contours = self.frames.copy()
 
-        for frame, contours in zip(self.frames_contours, self.raw_contours):
-            cv.drawContours(frame, contours, -1, (255, 0, 0))
+            for frame, contours in zip(self.frames_contours, self.raw_contours):
+                cv.drawContours(frame, contours, -1, (255, 0, 0))
 
     def visualize(self):
 
-        self.draw_contours()
+            self.draw_contours()
 
-        if self.verbose:
-            print('visualizing')
+            if self.verbose:
+                print('visualizing')
 
-        app = QtGui.QApplication([])
-        w = QtGui.QWidget()
-        w.resize(1200, 600)
-        w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
 
-        v = VideoStreamView(self.frames_contours, transpose=True)
+            self.w = QtGui.QWidget()
+            self.w.resize(1200, 600)
+            # w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
 
-        layout = QtGui.QGridLayout()
-        w.setLayout(layout)
-        layout.addWidget(v)
+            self.v = VideoStreamView(self.frames_contours, transpose=True)
 
-        w.show()
-        QtGui.QApplication.instance().exec_()
+            self.layout = QtGui.QGridLayout()
+            self.w.setLayout(self.layout)
+            self.layout.addWidget(self.v)
+
+            self.w.show()
+
+            #TODO Need to handle memory clean up of visualization much better
+
+    def on_close(self):
+        del self.v
+        del self.w
+        del self.layout
+
+        print('closed')
 
 
 if __name__ == '__main__':

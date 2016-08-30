@@ -7,13 +7,13 @@ import os
 import glob
 
 sys.path.append('/Users/nickgravish/Dropbox/Python/')
-import Kalman as Kalman
+import Tracker.Kalman as Kalman
 import json
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 
-from Visualize import VideoStreamView
+from Tracker.Visualize import VideoStreamView
 
 class KalmanParameters():
     def __init__(self):
@@ -70,7 +70,15 @@ class DataAssociator():
 
 
     """
-    def __init__(self, filename):
+    def __init__(self,
+                 videoname,
+                 max_covariance = 30,
+                 max_velocity = 10,
+                 n_covariances_to_reject = 3,
+                 max_tracked_objects = 100,
+                 kalman_state_cov = 0.2,
+                 kalman_init_cov = 10,
+                 kalman_measurement_cov = 50):
 
         # init empty kalman parameters
         self.kalman_parameters = KalmanParameters()
@@ -83,9 +91,19 @@ class DataAssociator():
         self.kalman_parameters.gammaW = None
         self.kalman_parameters.association_matrix = None
 
+        self.max_tracked_objects = max_tracked_objects
+        self.max_covariance = max_covariance
+        self.max_velocity = max_velocity
+        self.n_covariances_to_reject_data = n_covariances_to_reject
+
+        self.kalman_init_cov = kalman_init_cov
+        self.kalman_measurement_cov = kalman_measurement_cov
+        self.kalman_state_cov = kalman_state_cov
+
+
         self.init_kalman_parameters()
 
-        self.videoname = filename
+        self.videoname = videoname
 
         self.file_path = os.path.dirname(self.videoname)
         self.file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_contours.txt'
@@ -106,10 +124,6 @@ class DataAssociator():
         self.objects = {} # persistent list of all tracked objects
         self.current_objid = 0
 
-        self.max_tracked_objects = 20
-        self.max_covariance = 30
-        self.max_velocity = 10
-        self.n_covariances_to_reject_data = 3
 
 
     def init_kalman_parameters(self, filename=None):
@@ -140,22 +154,22 @@ class DataAssociator():
                            [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],  # area
                            [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]])  # angle
 
-            # covariance matrix
-            self.kalman_parameters.P0 = 10 * np.eye(10)
+            # initial covariance matrix
+            self.kalman_parameters.P0 = self.kalman_init_cov * np.eye(10)
 
-            # process noise covariance
-            self.kalman_parameters.Q = .2 * np.matrix(np.eye(10))
+            # state covariance
+            self.kalman_parameters.Q = self.kalman_state_cov * np.matrix(np.eye(10))
 
-            # measurement noise
-            self.kalman_parameters.R = 50 * np.matrix(np.eye(5))
+            # measurement covariance
+            self.kalman_parameters.R = self.kalman_measurement_cov * np.matrix(np.eye(5))
 
             self.kalman_parameters.gamma = None
             self.kalman_parameters.gammaW = None
 
-            self.kalman_parameters.max_covariance = 30
-            self.kalman_parameters.max_velocity = 10
+            self.kalman_parameters.max_covariance = self.max_covariance
+            self.kalman_parameters.max_velocity = self.max_velocity
 
-            self.kalman_parameters.association_matrix = np.matrix([[1, 1, 0, 0, 0]], dtype=float).T
+            self.kalman_parameters.association_matrix = np.matrix([[1, 1, 0, 0, 0]], dtype=float).T # only associate x,y
             self.kalman_parameters.association_matrix /= np.linalg.norm(self.kalman_parameters.association_matrix)
 
         else:
@@ -257,7 +271,7 @@ class DataAssociator():
             tracked_object['nframes'] += 1
             tracked_object['state'] = xhat
 
-            self.update_tracked_memory(tracked_object)
+
 
 
         # keep track of which new objects have been "taken"
@@ -296,7 +310,9 @@ class DataAssociator():
         if tracked_object_state_estimates is not None:
             for c, contour in enumerate(contourlist.contours):
                 m = np.array([[contour.x, contour.y]]) # state measurement of contour
-                error = np.array([np.linalg.norm(m - e) for e in tracked_object_state_estimates]) # mutual error between current contour and all objects
+
+                # mutual error between current contour and all objects
+                error = np.array([np.linalg.norm(m - e) for e in tracked_object_state_estimates])
                 ncov = self.n_covariances_to_reject_data * np.sqrt(tracked_object_covariances)
 
                 # this selects only the (contour, object) pair where the state error between prediction and measure is less than kalman errror
@@ -388,9 +404,14 @@ class DataAssociator():
             if v > self.max_velocity:
                 if objid not in objects_to_destroy:
                     objects_to_destroy.append(objid)
+
         for objid in objects_to_destroy:
             del (self.tracked_objects[objid])
             # print('destroying ', objid)
+
+        # after destroying erroneous tracks. Update the trackes in memory
+        for objid, tracked_object in self.tracked_objects.items():
+            self.update_tracked_memory(tracked_object)
 
         # recalculate persistance (not necessary, but convenient)
         objid_in_order_of_persistance = []
