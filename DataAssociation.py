@@ -155,7 +155,7 @@ class DataAssociator():
                            [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]])  # angle
 
             # initial covariance matrix
-            self.kalman_parameters.P0 = self.kalman_init_cov * np.eye(10)
+            self.kalman_parameters.P0 = self.kalman_init_cov * np.matrix(np.eye(10)) # updated this so now all matrices
 
             # state covariance
             self.kalman_parameters.Q = self.kalman_state_cov * np.matrix(np.eye(10))

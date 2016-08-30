@@ -41,7 +41,6 @@ class Tracker:
         self.out_file_assoc = os.path.join(self.file_path, self.file_name_assoc)
         self.file_exists_assoc = (glob.glob(self.out_file_assoc) != [])
 
-
         self.threshold_val = 0.8
         self.bkg_method = 'Divide'
         self.trk_method = 'opencv'
@@ -49,32 +48,83 @@ class Tracker:
 
         self.ROI = ROI
 
+        self.video_loaded = False
+
+        # initialize things that could be loaded from data files
+        #TODO need check
+        self.objects = {}
+        self.frames_tracks = []
+        self.contours = []
+
     def load_data(self):
-        with open(self.out_file, 'r') as infile:
-            data_file = json.load(infile)
+        """
+        Load in any tracking data associated with this tracker object. So far this can be either a
+            contours file
+            association file
 
-        # load in contours
-        self.contours = data_file['contours']
+        """
 
-        # convert to the opencv format
-        tmp = []
-        for frame in self.contours:
-            c = []
-            for contour in frame:
-                c.append(cvhlp.list_to_opencv_contours(contour['contours']))
-            tmp.append(c)
+        # first contours files
+        if self.file_exists is True:
+            with open(self.out_file, 'r') as infile:
+                data_file = json.load(infile)
 
-        self.raw_contours = tmp
+            # load in contours
+            self.contours = data_file['contours']
 
-        self.header = data_file['header']
+            # convert to the opencv format
+            tmp = []
+            for frame in self.contours:
+                c = []
+                for contour in frame:
+                    c.append(cvhlp.list_to_opencv_contours(contour['contours']))
+                tmp.append(c)
 
-        self.ROI = self.header['ROI']
-        self.ROI_Width = self.ROI[3] - self.ROI[1]
-        self.ROI_Height = self.ROI[2] - self.ROI[0]
+            self.raw_contours = tmp
 
-        self.bkg_method = self.header['bkg_method']
-        self.trk_method = self.header['trk_method']
-        self.bkg_sep = self.header['bkg_sep']
+            self.header = data_file['header']
+
+            self.ROI = self.header['ROI']
+            self.ROI_Width = self.ROI[3] - self.ROI[1]
+            self.ROI_Height = self.ROI[2] - self.ROI[0]
+
+            self.bkg_method = self.header['bkg_method']
+            self.trk_method = self.header['trk_method']
+            self.bkg_sep = self.header['bkg_sep']
+
+        # next association file
+        if self.file_exists_assoc is True:
+            with open(self.out_file_assoc, 'r') as infile:
+                data_file = json.load(infile)
+
+            # load in contours
+            objs = data_file['objects']
+            trks = data_file['tracks']
+
+            # conver frame by frame tracks to matrices like in original tracking format
+            for frm in trks:
+                for obj in frm:
+                    obj['measurements'] = np.matrix(obj['measurements'])
+                    obj['xy_cov_matrix'] = np.matrix(obj['xy_cov_matrix'])
+
+            # convert dict keys to ints rather than strings. This happens because of JSON export
+            objs = {int(k): item for k, item in objs.items()}
+
+            # convert objects into matrices
+            for kk, obj in objs.items():
+                obj['x'] = np.array(obj['x'])
+                obj['y'] = np.array(obj['y'])
+                obj['vy'] = np.array(obj['vy'])
+                obj['vx'] = np.array(obj['vx'])
+                obj['area'] = np.array(obj['area'])
+                obj['error'] = np.array(obj['error'])
+                obj['angle'] = np.array(obj['angle'])
+                obj['frames'] = np.array(obj['frames'])
+                obj['measurements'] = np.matrix(obj['measurements'])
+                obj['xy_cov_matrix'] = [np.matrix(o) for o in obj['xy_cov_matrix']]
+
+            self.frames_tracks = trks
+            self.objects = objs
 
     def associate_contours(self,
                            max_covariance=30,
@@ -132,7 +182,7 @@ class Tracker:
         self.frames_normed = None
         self.frames_BW = None
 
-        self.loaded = False
+        self.video_loaded = False
 
         self.vid.set(cv.CAP_PROP_POS_FRAMES,0)
         if not (self.NumFrames > 0):
@@ -152,7 +202,7 @@ class Tracker:
             if ((kk % 100) == 0) and self.verbose:
                 print(kk)
 
-        self.loaded = True
+        self.video_loaded  = True
 
     def exit_error(self):
         self.contours = -1
@@ -245,6 +295,22 @@ class Tracker:
 
                 self.contours.append(data)
 
+    def clean_tracks(self):
+        """
+        Criteria to keep or not keep tracks
+        For right now I want to keep tracks that go from x = 200-900 contiguously.
+        """
+        # first clean objects list
+        objs_that_dont_satisfy_criteria = [k for k, obj in self.objects.items() if (np.all(obj['x'] > 200) or
+                                                                                np.all(obj['x'] < 900))]
+        for k in objs_that_dont_satisfy_criteria:
+            del self.objects[k]
+
+        # then remove frame references to that unused objects
+        self.frames_tracks = [[obj for obj in frame if obj['ID'] not in objs_that_dont_satisfy_criteria]
+                         for frame in self.frames_tracks]
+
+
     def save_JSON(self):
         with open(self.out_file, 'w+') as output:
             json.dump({'header': {'ROI': self.ROI,
@@ -257,6 +323,10 @@ class Tracker:
                         indent=4)
 
     def save_association_JSON(self):
+
+        # TODO figure out how to best handle conversion to list
+
+
         # need to save two lists, frames_tracks, and objects
         tmp_tracks = copy.deepcopy(self.frames_tracks)
         for frm in tmp_tracks:
@@ -287,32 +357,36 @@ class Tracker:
 
 
     def draw_contours(self):
-            self.frames_contours = self.frames.copy()
+        self.frames_contours = self.frames.copy()
 
-            for frame, contours in zip(self.frames_contours, self.raw_contours):
-                cv.drawContours(frame, contours, -1, (255, 0, 0))
+        for frame, contours in zip(self.frames_contours, self.raw_contours):
+            cv.drawContours(frame, contours, -1, (255, 0, 0))
 
     def visualize(self):
 
-            self.draw_contours()
+        # Load video if not already
+        if self.video_loaded is not True:
+            self.load_video()
 
-            if self.verbose:
-                print('visualizing')
+        self.draw_contours()
+
+        if self.verbose:
+            print('visualizing')
 
 
-            self.w = QtGui.QWidget()
-            self.w.resize(1200, 600)
-            # w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
+        self.w = QtGui.QWidget()
+        self.w.resize(1200, 600)
+        # w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
 
-            self.v = VideoStreamView(self.frames_contours, transpose=True)
+        self.v = VideoStreamView(self.frames_contours, transpose=True)
 
-            self.layout = QtGui.QGridLayout()
-            self.w.setLayout(self.layout)
-            self.layout.addWidget(self.v)
+        self.layout = QtGui.QGridLayout()
+        self.w.setLayout(self.layout)
+        self.layout.addWidget(self.v)
 
-            self.w.show()
+        self.w.show()
 
-            #TODO Need to handle memory clean up of visualization much better
+        #TODO Need to handle memory clean up of visualization much better
 
     def on_close(self):
         del self.v
