@@ -300,9 +300,12 @@ class Tracker:
         Criteria to keep or not keep tracks
         For right now I want to keep tracks that go from x = 200-900 contiguously.
         """
+
+        x_range = (200,900)
+
         # first clean objects list
-        objs_that_dont_satisfy_criteria = [k for k, obj in self.objects.items() if (np.all(obj['x'] > 200) or
-                                                                                np.all(obj['x'] < 900))]
+        objs_that_dont_satisfy_criteria = [k for k, obj in self.objects.items() if (np.all(obj['x'] > x_range[0]) or
+                                                                                np.all(obj['x'] < x_range[1]))]
         for k in objs_that_dont_satisfy_criteria:
             del self.objects[k]
 

@@ -5,6 +5,8 @@ import numpy as np
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 
+from pyqtgraph import ptime as ptime
+
 import cv2 as cv
 import os
 
@@ -13,6 +15,10 @@ class VideoStreamView(pg.ImageView):
     """
     This will take in a video container that will handle the loading. This way
     VideoStreamView class is agnostic to how videos are handled/loaded
+
+    Changed functionality a bit, to be able to load in streams to memory, or to stream from disk, no
+    longer treating "image" as 3D object, but instead just as the image. Thus when referencing timing of
+    video, ened to use video.shape[0]
 
 
     """
@@ -27,7 +33,7 @@ class VideoStreamView(pg.ImageView):
 
         if type(video) == np.ndarray:
             self.video = video
-            self.Height, self.Width , self.NumFrames = self.video.shape
+            self.NumFrames, self.Height, self.Width = self.video.shape
             self.is_array = True
 
         else:
@@ -220,6 +226,33 @@ class VideoStreamView(pg.ImageView):
         self.ignoreTimeLine = False
         self.sigIndexChanged.emit(self.currentIndex)
 
+    def keyPressEvent(self, ev):
+        # print ev.key()
+        if ev.key() == QtCore.Qt.Key_Space:
+            if self.playRate == 0:
+                fps = 30
+                self.play(fps)
+                # print fps
+            else:
+                self.play(0)
+            ev.accept()
+        elif ev.key() == QtCore.Qt.Key_Home:
+            self.setCurrentIndex(0)
+            self.play(0)
+            ev.accept()
+        elif ev.key() == QtCore.Qt.Key_End:
+            self.setCurrentIndex(self.NumFrames - 1)
+            self.play(0)
+            ev.accept()
+        elif ev.key() in self.noRepeatKeys:
+            ev.accept()
+            if ev.isAutoRepeat():
+                return
+            self.keysPressed[ev.key()] = 1
+            self.evalKeyState()
+        else:
+            QtGui.QWidget.keyPressEvent(self, ev)
+
     def timeLineChanged(self):
         # (ind, time) = self.timeIndex(self.ui.timeSlider)
         if self.ignoreTimeLine:
@@ -232,6 +265,22 @@ class VideoStreamView(pg.ImageView):
         # self.timeLine.setPos(time)
         # self.emit(QtCore.SIGNAL('timeChanged'), ind, time)
         self.sigTimeChanged.emit(ind, time)
+
+
+    def timeout(self):
+        now = ptime.time()
+        dt = now - self.lastPlayTime
+        if dt < 0:
+            return
+        n = int(self.playRate * dt)
+
+        if n != 0:
+            print('n = ', n, '\t',  self.currentIndex+n)
+            self.lastPlayTime += (float(n)/self.playRate)
+            if self.currentIndex+n > self.NumFrames:
+                self.play(0)
+            self.jumpFrames(n)
+
 
 
 ## Start Qt event loop unless running in interactive mode.
