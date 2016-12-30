@@ -24,7 +24,7 @@ class Tracker:
 
 #TODO add an open command to open the test folder
 
-    def __init__(self, videoname, ROI = None, verbose = False):
+    def __init__(self, videoname, ROI = None, verbose = False, min_object_size = 100, frame_range = None):
 
         self.verbose = verbose
 
@@ -41,10 +41,13 @@ class Tracker:
         self.out_file_assoc = os.path.join(self.file_path, self.file_name_assoc)
         self.file_exists_assoc = (glob.glob(self.out_file_assoc) != [])
 
+        #TODO Need to make this have optional constructor inputs
         self.threshold_val = 0.8
         self.bkg_method = 'Divide'
         self.trk_method = 'opencv'
         self.bkg_sep = 100
+        self.min_object_size = min_object_size
+        self.frame_range = frame_range
 
         self.ROI = ROI
 
@@ -76,8 +79,10 @@ class Tracker:
             tmp = []
             for frame in self.contours:
                 c = []
-                for contour in frame:
-                    c.append(cvhlp.list_to_opencv_contours(contour['contours']))
+                if frame != [-1]:   # check for untracked placeholder
+                    for contour in frame:
+                        c.append(cvhlp.list_to_opencv_contours(contour['contours']))
+
                 tmp.append(c)
 
             self.raw_contours = tmp
@@ -150,6 +155,10 @@ class Tracker:
 
         del tmp
 
+    def get_number_frames(self):
+        self.vid = cv.VideoCapture(self.videoname)
+        self.NumFrames = int(self.vid.get(cv.CAP_PROP_FRAME_COUNT))
+        return self.NumFrames
 
     def load_video(self):
         if self.verbose:
@@ -157,9 +166,22 @@ class Tracker:
 
         self.vid = cv.VideoCapture(self.videoname)
 
-        self.NumFrames = self.vid.get(cv.CAP_PROP_FRAME_COUNT)
+        self.NumFrames = int(self.vid.get(cv.CAP_PROP_FRAME_COUNT))
+        if not (self.NumFrames > 0):
+            self.exit_error()
+            raise IOError('Codec issue: cannot read number of frames.')
+
         self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
         self.Width = self.vid.get(cv.CAP_PROP_FRAME_WIDTH)
+
+        if self.frame_range is None:
+            self.frame_range = (0, self.NumFrames)
+        else:
+            # check doesn't exceed number of frames
+            if self.frame_range[0] + self.frame_range[1] > self.NumFrames:
+                self.frame_range = (self.frame_range[0], self.NumFrames - self.frame_range[0])
+
+
 
         # if already tracked, load in the data
         if self.file_exists:  # load in contours to associate
@@ -167,7 +189,7 @@ class Tracker:
 
         else:
             if self.ROI is None:
-                self.ROI = (0, 0, self.Width, self.Height)
+                self.ROI = (0, 0, self.Height, self.Width)
                 self.ROI_Width = self.Width
                 self.ROI_Height = self.Height
             else:
@@ -177,19 +199,17 @@ class Tracker:
                 if self.verbose:
                     print(self.ROI_Height, self.ROI_Width)
 
-        self.frames = np.zeros((self.NumFrames, self.ROI_Height, self.ROI_Width), np.uint8)
+        self.frames = np.zeros((self.frame_range[1], self.ROI_Height, self.ROI_Width), np.uint8)
         self.background = None
         self.frames_normed = None
         self.frames_BW = None
 
         self.video_loaded = False
 
-        self.vid.set(cv.CAP_PROP_POS_FRAMES,0)
-        if not (self.NumFrames > 0):
-            self.exit_error()
-            raise IOError('Codec issue: cannot read number of frames.')
+        # set first frame to load
+        self.set_frame(self.frame_range[0])
 
-        for kk in range(int(self.NumFrames)):
+        for kk in range(self.frame_range[1]):
             tru, ret = self.vid.read(1)
 
             # check if video frames are being loaded
@@ -204,21 +224,58 @@ class Tracker:
 
         self.video_loaded  = True
 
+        # init contours and other things if has not been loaded from a data file
+        if len(self.contours) == 0:
+            self.contours = [[-1] for k in range(self.NumFrames)]
+
+
     def exit_error(self):
-        self.contours = -1
-        self.save_JSON()
+        []
+        # self.contours = -1
+        # self.save_JSON()
+
+    def set_frame(self, frame):
+        self.vid.set(cv.CAP_PROP_POS_FRAMES, 0)
+        for kk in range(frame):
+            tru, ret = self.vid.read(1)
+        # self.vid.set(cv.CAP_PROP_POS_FRAMES, frame)
+
 
     def compute_background(self):
-        self.background = np.float64(np.median(self.frames[0:self.bkg_sep:,:,:], axis = 0))
+        """
+        Independent of the frame range loaded, background has to be computed over total video or else can run into
+        tracking problems
+        """
+
+        # if all frames loaded, do as normal
+        if self.frame_range[1] == self.NumFrames:
+            self.background = np.float32(np.median(self.frames[0::self.bkg_sep,:,:], axis = 0))
+            print('all_loaded!')
+        else:
+            self.background = []
+            for kk in range(0, self.NumFrames, self.bkg_sep):
+                self.vid.set(cv.CAP_PROP_POS_FRAMES, kk)
+                tru, ret = self.vid.read(1)
+
+                # check if video frames are being loaded
+                if not tru:
+                    self.exit_error()
+                    raise IOError('Codec issue: cannot load frames.')
+
+                self.background.append(ret[self.ROI[0]:self.ROI[2], self.ROI[1]:self.ROI[3],0])  # assumes loading color
+
+            self.background = np.array(self.background, dtype='float32')
+            self.background = np.float32(np.median(self.background, axis=0))
+
         # add a small number to background to not have divide by zeros for division
-        self.background = self.background + np.float64(1E-6)
+        self.background = self.background + np.float32(1E-6)
         if self.verbose:
             print('BKG')
 
     def remove_background(self):
         if self.bkg_method == 'Divide':
             norm_bkg = np.mean(self.background[:]) # normalize for mean intensity of image
-            norm_frm = np.mean(self.frames, axis=(1,2)) # normalize for mean intensity of current frame. For flicker
+            # norm_frm = np.mean(self.frames, axis=(1,2)) # normalize for mean intensity of current frame. For flicker
             self.frames_normed = (self.frames / norm_bkg) / (self.background / norm_bkg)    # broadcasting !!
 
         else:
@@ -244,40 +301,40 @@ class Tracker:
         if self.verbose:
             print('Tracking')
 
-        self.contours = []
+        # self.contours = []
 
-        if self.trk_method == 'sklearn':
-            self.raw_contours = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
-            for objects in self.frames_objs:
-                data = []
-
-                for object in objects:
-                    if(object.area > 5): # can be made more functional
-                        x = object.centroid[0]
-                        y = object.centroid[1]
-                        area = object.area
-                        angle = object.orientation
-                        ecc = object.eccentricity
-                        major_axis = object.major_axis_length
-                        minor_axis = object.minor_axis_length
-                        bbox = object.bbox
-
-                        data.append({'x': x, 'y': y, 'area': area,
-                                     'ecc': ecc, 'angle': angle,
-                                     'major_axis': major_axis,
-                                     'minor_axis': minor_axis,
-                                     'bbox': bbox})
-
-                self.contours.append(data)
+        # if self.trk_method == 'sklearn':
+        #     self.raw_contours = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
+        #     for objects in self.frames_objs:
+        #         data = []
+        #
+        #         for object in objects:
+        #             if(object.area > self.min_object_size):
+        #                 x = object.centroid[0]
+        #                 y = object.centroid[1]
+        #                 area = object.area
+        #                 angle = object.orientation
+        #                 ecc = object.eccentricity
+        #                 major_axis = object.major_axis_length
+        #                 minor_axis = object.minor_axis_length
+        #                 bbox = object.bbox
+        #
+        #                 data.append({'x': x, 'y': y, 'area': area,
+        #                              'ecc': ecc, 'angle': angle,
+        #                              'major_axis': major_axis,
+        #                              'minor_axis': minor_axis,
+        #                              'bbox': bbox})
+        #
+        #         self.contours.append(data)
 
         elif self.trk_method == 'opencv':
             self.raw_contours = [cv.findContours(np.uint8(frame), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[1] for frame in self.frames_BW]
 
-            for objects in self.raw_contours:
+            for kk, objects in enumerate(self.raw_contours):
                 data = []
 
                 for object in objects:
-                        if len(object) > 5: # for ellipse fitting
+                        if len(object) > self.min_object_size:
                             ellipse = cv.fitEllipse(object)
                             (x, y), (a, b), angle = ellipse
                             a /= 2.
@@ -293,7 +350,7 @@ class Tracker:
                                          'bbox': bbox,
                                          'contours': cvhlp.opencv_contour_to_list(object)})
 
-                self.contours.append(data)
+                self.contours[kk + self.frame_range[0]] = data
 
     def clean_tracks(self):
         """
@@ -397,6 +454,12 @@ class Tracker:
         del self.layout
 
         print('closed')
+
+    def __str__(self):
+        """
+        #TODO
+
+        """
 
 
 if __name__ == '__main__':

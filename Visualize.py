@@ -275,7 +275,6 @@ class VideoStreamView(pg.ImageView):
         n = int(self.playRate * dt)
 
         if n != 0:
-            print('n = ', n, '\t',  self.currentIndex+n)
             self.lastPlayTime += (float(n)/self.playRate)
             if self.currentIndex+n > self.NumFrames:
                 self.play(0)
