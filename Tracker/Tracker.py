@@ -352,13 +352,11 @@ class Tracker:
 
                 self.contours[kk + self.frame_range[0]] = data
 
-    def clean_tracks(self):
+    def clean_tracks(self, x_range = (200,900)):
         """
         Criteria to keep or not keep tracks
         For right now I want to keep tracks that go from x = 200-900 contiguously.
         """
-
-        x_range = (200,900)
 
         # first clean objects list
         objs_that_dont_satisfy_criteria = [k for k, obj in self.objects.items() if (np.all(obj['x'] > x_range[0]) or
