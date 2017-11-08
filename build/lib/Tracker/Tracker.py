@@ -58,6 +58,7 @@ class Tracker:
         self.objects = {}
         self.frames_tracks = []
         self.contours = []
+        self.raw_contours = []
 
     def load_data(self):
         """
