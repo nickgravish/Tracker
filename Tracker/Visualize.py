@@ -66,8 +66,9 @@ class VideoStreamView(pg.ImageView):
     #     self.view.addItem(pg.PlotItem.plot(x,y,symbol = 'o', pen=None))
 
     def wheelEvent(self, ev):
-        sc = ev.delta()
+        sc = ev.angleDelta().y()/8
         self.jumpFrames(sc)
+        self.timeLine.getBounds()
 
     def loadFrame(self, index):
 
@@ -285,7 +286,53 @@ class VideoStreamView(pg.ImageView):
 ## Start Qt event loop unless running in interactive mode.
 if __name__ == '__main__':
 
+    import cv2 as cv
+    import sys
+
+    app = QtGui.QApplication([])
+    # if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+    #     QtGui.QApplication.instance().exec_()
+
+
+
+    file = '/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/' \
+           'Bee_experiments_2016/2016-08-15_13.05.57/' \
+           '1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
+
+    vid = cv.VideoCapture(file)
+
+    NumFrames = int(vid.get(cv.CAP_PROP_FRAME_COUNT))
+    Height = vid.get(cv.CAP_PROP_FRAME_HEIGHT)
+    Width = vid.get(cv.CAP_PROP_FRAME_WIDTH)
+
+    frames = np.zeros((NumFrames, Height, Width), np.uint8)
+
+    for kk in range(NumFrames):
+        tru, ret = vid.read(1)
+
+        # check if video frames are being loaded
+        if not tru:
+            print('Codec issue: cannot load frames.')
+            exit()
+
+        frames[kk, :, :] = ret[:, :, 0]  # assumes loading color
+
+    print('Loaded!')
+
+    video = VideoStreamView(frames)
+
+
+
+    w = QtGui.QWidget()
+    w.resize(1200, 600)
+    layout = QtGui.QGridLayout()
+    w.setLayout(layout)
+    layout.addWidget(video)
+
+    w.show()
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
+
+
 

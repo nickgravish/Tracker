@@ -335,6 +335,7 @@ class Tracker:
                 data = []
 
                 for object in objects:
+
                         if len(object) > self.min_object_size:
                             ellipse = cv.fitEllipse(object)
                             (x, y), (a, b), angle = ellipse
@@ -420,6 +421,10 @@ class Tracker:
 
         for frame, contours in zip(self.frames_contours, self.raw_contours):
             cv.drawContours(frame, contours, -1, (255, 0, 0))
+
+
+    def draw_tracks(self:
+
 
     def visualize(self):
 
