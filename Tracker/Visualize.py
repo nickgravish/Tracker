@@ -302,8 +302,8 @@ if __name__ == '__main__':
     vid = cv.VideoCapture(file)
 
     NumFrames = int(vid.get(cv.CAP_PROP_FRAME_COUNT))
-    Height = vid.get(cv.CAP_PROP_FRAME_HEIGHT)
-    Width = vid.get(cv.CAP_PROP_FRAME_WIDTH)
+    Height = int(vid.get(cv.CAP_PROP_FRAME_HEIGHT))
+    Width = int(vid.get(cv.CAP_PROP_FRAME_WIDTH))
 
     frames = np.zeros((NumFrames, Height, Width), np.uint8)
 
