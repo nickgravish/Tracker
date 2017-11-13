@@ -423,7 +423,7 @@ class Tracker:
             cv.drawContours(frame, contours, -1, (255, 0, 0))
 
 
-    def draw_tracks(self:
+    # def draw_tracks(self:
 
 
     def visualize(self):

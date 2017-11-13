@@ -282,10 +282,17 @@ class VideoStreamView(pg.ImageView):
             self.jumpFrames(n)
 
 
+def click(event):
+    event.accept()
+    pos = event.pos()
+    print(int(pos.x()), int(pos.y()))
+
 
 ## Start Qt event loop unless running in interactive mode.
 if __name__ == '__main__':
-
+    from pyqtgraph.Qt import QtCore, QtGui
+    import pyqtgraph as pg
+    import numpy as np
     import cv2 as cv
     import sys
 
@@ -305,9 +312,9 @@ if __name__ == '__main__':
     Height = int(vid.get(cv.CAP_PROP_FRAME_HEIGHT))
     Width = int(vid.get(cv.CAP_PROP_FRAME_WIDTH))
 
-    frames = np.zeros((NumFrames, Height, Width), np.uint8)
+    frames = np.zeros((10, Height, Width), np.uint8)
 
-    for kk in range(NumFrames):
+    for kk in range(10):
         tru, ret = vid.read(1)
 
         # check if video frames are being loaded
@@ -319,16 +326,25 @@ if __name__ == '__main__':
 
     print('Loaded!')
 
-    video = VideoStreamView(frames)
 
+    # p = video.imageItem.addPlot()
 
+    # pg.plot([Width/2], [Height/2], symbolBrush=(255,0,0), symbolPen='w')
+
+    # video.imageItem.
 
     w = QtGui.QWidget()
     w.resize(1200, 600)
     layout = QtGui.QGridLayout()
+
+    video = VideoStreamView(frames)
+    video.imageItem.mouseClickEvent = click
+
+    plt = pg.PlotDataItem([Height / 2], [Width / 2], symbol='o', symbolBrush=(255, 0, 0), symbolPen='w')
+    plt.setParentItem(video.imageItem)
+
     w.setLayout(layout)
     layout.addWidget(video)
-
     w.show()
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
