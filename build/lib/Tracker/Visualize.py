@@ -24,7 +24,7 @@ class VideoStreamView(pg.ImageView):
     """
     sigIndexChanged = QtCore.Signal(object)
 
-    def __init__(self, video, transpose = False, tracked_data = None, view = None):
+    def __init__(self, video, transpose = False, contours_data = None, associated_data = None, view = None):
         super().__init__(view = view)
         pg.setConfigOptions(antialias=True)
 
@@ -42,32 +42,38 @@ class VideoStreamView(pg.ImageView):
             self.Width = self.video.getWidth()
             self.is_array = False
 
+        self.contours = contours_data
+        self.associated_data = associated_data
+
+        self.plot_items = []
+
+
         self.image = None
         self.loadFrame(1)
         self.setImage(self.image)
+        self.currentIndex = 0
 
         # override the wheel event zoom functionality so that can be used for timeline changnig
         self.ui.roiPlot.wheelEvent = self.wheelEvent
 
-        self.tracked_data = tracked_data
-        if self.tracked_data is not None:
-            self.addPlot()
+        self.imageItem.mouseClickEvent = self.ms_click
 
 
-    # def addPlot(self):
-    #     x = []
-    #     y = []
-    #
-    #     for frm in self.tracked_data:
-    #         for trk in frm:
-    #             x.append(trk['x'])
-    #             y.append(trk['y'])
-    #
-    #     self.view.addItem(pg.PlotItem.plot(x,y,symbol = 'o', pen=None))
+    def updatePoints(self):
+
+        if not self.contours:
+
+            curr_x = self.contours[self.currentIndex]['x']
+            curr_y = self.contours[sel  f.currentIndex]['y']
+
+            self.plot_points(curr_x, curr_y)
+
+            print(curr_x)
 
     def wheelEvent(self, ev):
-        sc = ev.delta()
+        sc = ev.angleDelta().y()/8
         self.jumpFrames(sc)
+        self.timeLine.getBounds()
 
     def loadFrame(self, index):
 
@@ -199,6 +205,7 @@ class VideoStreamView(pg.ImageView):
             self.autoRange()
         self.roiClicked()
 
+        self.updatePoints()
 
     def updateImage(self, autoHistogramRange=True):
         ## Redraw image on screen
@@ -280,12 +287,105 @@ class VideoStreamView(pg.ImageView):
                 self.play(0)
             self.jumpFrames(n)
 
+    def plot_points(self, x = [], y = []):
+
+        if not x:
+            x = [self.Height/ 2]
+            y = [self.Width/ 2]
+            print('xx')
+
+        plt = pg.PlotDataItem(x, y, symbol='o', symbolBrush=(255, 0, 0), symbolPen='w')
+        plt.setParentItem(self.imageItem)
+
+        self.plot_items.append(plt)
+        print(len(self.plot_items))
+
+
+    def ms_click(self, event):
+        event.accept()
+        pos = event.pos()
+
+        x = pos.x()
+        y = pos.y()
+
+        print(int(x), int(y))
+
+        # self.plot_points([x], [y])
+        #
+        #
+        # for plt in self.plot_items:
+        #     plt.setSymbolBrush(np.random.randint(0,254,1), np.random.randint(0,254,1), np.random.randint(0,254,1))
+        #
+        # self.updateImage()
+
+
+# def click(event):
+#     event.accept()
+#     pos = event.pos()
+#     print(int(pos.x()), int(pos.y()))
 
 
 ## Start Qt event loop unless running in interactive mode.
 if __name__ == '__main__':
+    from pyqtgraph.Qt import QtCore, QtGui
+    import pyqtgraph as pg
+    import numpy as np
+    import cv2 as cv
+    import sys
 
+    app = QtGui.QApplication([])
+    # if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+    #     QtGui.QApplication.instance().exec_()
+
+
+
+    file = '/Users/nickgravish/source_code/Tracker/test_data/1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
+
+
+    vid = cv.VideoCapture(file)
+
+    NumFrames = int(vid.get(cv.CAP_PROP_FRAME_COUNT))
+    Height = int(vid.get(cv.CAP_PROP_FRAME_HEIGHT))
+    Width = int(vid.get(cv.CAP_PROP_FRAME_WIDTH))
+
+    frames = np.zeros((10, Height, Width), np.uint8)
+
+    for kk in range(10):
+        tru, ret = vid.read(1)
+
+        # check if video frames are being loaded
+        if not tru:
+            print('Codec issue: cannot load frames.')
+            exit()
+
+        frames[kk, :, :] = ret[:, :, 0]  # assumes loading color
+
+    print('Loaded!')
+
+    video = VideoStreamView(frames)
+
+    # p = video.imageItem.addPlot()
+
+    # pg.plot([Width/2], [Height/2], symbolBrush=(255,0,0), symbolPen='w')
+
+    # video.imageItem.
+
+    w = QtGui.QWidget()
+    w.resize(1200, 600)
+    layout = QtGui.QGridLayout()
+
+
+    # video.imageItem.mouseClickEvent = click
+    #
+    # plt = pg.PlotDataItem([Height / 2], [Width / 2], symbol='o', symbolBrush=(255, 0, 0), symbolPen='w')
+    # plt.setParentItem(video.imageItem)
+
+    w.setLayout(layout)
+    layout.addWidget(video)
+    w.show()
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
+
+
 

@@ -10,9 +10,12 @@ import glob
 import sys
 
 sys.path.append('/Users/nickgravish/Dropbox/Python/')
+sys.path.append('/Users/nickgravish/Dropbox/source_code/Tracker')
+
 import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
+
 from Tracker.Visualize import VideoStreamView
 from Tracker.DataAssociation import DataAssociator
 
@@ -302,57 +305,41 @@ class Tracker:
         if self.verbose:
             print('Tracking')
 
-        # self.contours = []
 
-        # if self.trk_method == 'sklearn':
-        #     self.raw_contours = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
-        #     for objects in self.frames_objs:
-        #         data = []
-        #
-        #         for object in objects:
-        #             if(object.area > self.min_object_size):
-        #                 x = object.centroid[0]
-        #                 y = object.centroid[1]
-        #                 area = object.area
-        #                 angle = object.orientation
-        #                 ecc = object.eccentricity
-        #                 major_axis = object.major_axis_length
-        #                 minor_axis = object.minor_axis_length
-        #                 bbox = object.bbox
-        #
-        #                 data.append({'x': x, 'y': y, 'area': area,
-        #                              'ecc': ecc, 'angle': angle,
-        #                              'major_axis': major_axis,
-        #                              'minor_axis': minor_axis,
-        #                              'bbox': bbox})
-        #
-        #         self.contours.append(data)
+        self.raw_contours = [cv.findContours(np.uint8(frame), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[1] for frame in self.frames_BW]
 
-        elif self.trk_method == 'opencv':
-            self.raw_contours = [cv.findContours(np.uint8(frame), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[1] for frame in self.frames_BW]
+        for kk, objects in enumerate(self.raw_contours):
+            data = []
 
-            for kk, objects in enumerate(self.raw_contours):
-                data = []
+            for object in objects:
 
-                for object in objects:
+                    if len(object) > self.min_object_size:
+                        ellipse = cv.fitEllipse(object)
+                        (x, y), (a, b), angle = ellipse
+                        a /= 2.
+                        b /= 2.
+                        ecc = np.min((a, b)) / np.max((a, b))
+                        area = cv.contourArea(object)
+                        bbox = cv.boundingRect(object)
 
-                        if len(object) > self.min_object_size:
-                            ellipse = cv.fitEllipse(object)
-                            (x, y), (a, b), angle = ellipse
-                            a /= 2.
-                            b /= 2.
-                            ecc = np.min((a, b)) / np.max((a, b))
-                            area = cv.contourArea(object)
-                            bbox = cv.boundingRect(object)
+                        data.append({'x': x, 'y': y, 'area': area,
+                                     'ecc': ecc, 'angle': angle,
+                                     'major_axis': a,
+                                     'minor_axis': b,
+                                     'bbox': bbox,
+                                     'contours': cvhlp.opencv_contour_to_list(object)})
 
-                            data.append({'x': x, 'y': y, 'area': area,
-                                         'ecc': ecc, 'angle': angle,
-                                         'major_axis': a,
-                                         'minor_axis': b,
-                                         'bbox': bbox,
-                                         'contours': cvhlp.opencv_contour_to_list(object)})
+            self.contours[kk + self.frame_range[0]] = data
 
-                self.contours[kk + self.frame_range[0]] = data
+    def number_of_objects(self):
+        num_obj = 0
+
+        for c in self.contours:
+            for d in c:
+                if d != -1:
+                    num_obj += 1
+
+        return num_obj
 
     def clean_tracks(self, x_range = (200,900)):
         """
@@ -442,7 +429,12 @@ class Tracker:
         self.w.resize(1200, 600)
         # w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
 
-        self.v = VideoStreamView(self.frames_contours, transpose=True)
+        contours_tmp = [self.contours[c] for c in list(np.arange(self.frame_range[0], \
+                                                                 self.frame_range[0]+self.frame_range[1]))]
+
+        print(len(contours_tmp))
+
+        self.v = VideoStreamView(self.frames_contours, transpose=True, contours_data=contours_tmp)
 
         self.layout = QtGui.QGridLayout()
         self.w.setLayout(self.layout)
@@ -467,17 +459,12 @@ class Tracker:
 
 
 if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Qt4Agg')
+    app = QtGui.QApplication([])
 
-    import matplotlib.pyplot as plt
-
-    file = '/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/' \
-           'Bee_experiments_2016/2016-08-15_13.05.57/' \
-           '1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
+    file = '/Users/nickgravish/source_code/Tracker/test_data/1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
 
     # Load in images to memory during construction
-    video = Tracker(file, ROI=(30, 30, 550, 1174), verbose='True')
+    video = Tracker(file, ROI=(30, 30, 550, 1174), verbose='True', frame_range=[600,700])
 
 
     video.load_video()
@@ -488,4 +475,7 @@ if __name__ == '__main__':
 
     video.visualize()
 
+
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
 

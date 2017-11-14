@@ -24,7 +24,7 @@ class VideoStreamView(pg.ImageView):
     """
     sigIndexChanged = QtCore.Signal(object)
 
-    def __init__(self, video, transpose = False, tracked_data = None, view = None):
+    def __init__(self, video, transpose = False, contours_data = None, associated_data = None, view = None):
         super().__init__(view = view)
         pg.setConfigOptions(antialias=True)
 
@@ -42,33 +42,74 @@ class VideoStreamView(pg.ImageView):
             self.Width = self.video.getWidth()
             self.is_array = False
 
+        self.contours = contours_data
+        self.associated_data = associated_data
+
+        self.plot_items = []
+        self.plot = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'k', 'width':2}
+                                    , pen = None, symbolSize = 10)
+        self.plot.setParentItem(self.imageItem)
+        self.lastClicked = []
+
+        self.plot.sigPointsClicked.connect(self.clicked)
+
+
+
         self.image = None
         self.loadFrame(1)
         self.setImage(self.image)
+        self.currentIndex = 0
 
         # override the wheel event zoom functionality so that can be used for timeline changnig
         self.ui.roiPlot.wheelEvent = self.wheelEvent
 
-        self.tracked_data = tracked_data
-        if self.tracked_data is not None:
-            self.addPlot()
+        self.imageItem.mouseClickEvent = self.ms_click
 
 
-    # def addPlot(self):
-    #     x = []
-    #     y = []
-    #
-    #     for frm in self.tracked_data:
-    #         for trk in frm:
-    #             x.append(trk['x'])
-    #             y.append(trk['y'])
-    #
-    #     self.view.addItem(pg.PlotItem.plot(x,y,symbol = 'o', pen=None))
+    def updatePoints(self):
+
+        if self.contours:
+
+            curr_x = []
+            curr_y = []
+
+            for c in self.contours[int(self.currentIndex)]:
+
+                curr_x.append(c['x'])
+                curr_y.append(c['y'])
+
+            print(curr_x)
+            print(curr_y)
+            print('\r\n')
+
+            self.plot_points(curr_x, curr_y)
+
+    def plot_points(self, x = [], y = []):
+
+        if not x:
+            x = [self.Height/ 2]
+            y = [self.Width/ 2]
+
+            print('plotting')
+
+        self.plot.setData(x = x, y = y)
+
+    def clicked(self, plot, points):
+
+        for p in self.lastClicked:
+            p.resetPen()
+
+        for p in points:
+            p.setPen('b', width=2)
+            print("clicked points", p.pos())
+
+        self.lastClicked = points
+
 
     def wheelEvent(self, ev):
         sc = ev.angleDelta().y()/8
         self.jumpFrames(sc)
-        self.timeLine.getBounds()
+        # self.timeLine.getBounds()
 
     def loadFrame(self, index):
 
@@ -200,7 +241,6 @@ class VideoStreamView(pg.ImageView):
             self.autoRange()
         self.roiClicked()
 
-
     def updateImage(self, autoHistogramRange=True):
         ## Redraw image on screen
         if self.image is None:
@@ -212,6 +252,7 @@ class VideoStreamView(pg.ImageView):
             self.ui.histogram.setHistogramRange(self.levelMin, self.levelMax)
 
         self.imageItem.updateImage(self.image)
+        self.updatePoints()
         self.ui.roiPlot.show()
 
 
@@ -282,10 +323,28 @@ class VideoStreamView(pg.ImageView):
             self.jumpFrames(n)
 
 
-def click(event):
-    event.accept()
-    pos = event.pos()
-    print(int(pos.x()), int(pos.y()))
+    def ms_click(self, event):
+        event.accept()
+        pos = event.pos()
+
+        x = pos.x()
+        y = pos.y()
+
+        print(int(x), int(y))
+
+        # self.plot_points([x], [y])
+        #
+        #
+        # for plt in self.plot_items:
+        #     plt.setSymbolBrush(np.random.randint(0,254,1), np.random.randint(0,254,1), np.random.randint(0,254,1))
+        #
+        # self.updateImage()
+
+
+# def click(event):
+#     event.accept()
+#     pos = event.pos()
+#     print(int(pos.x()), int(pos.y()))
 
 
 ## Start Qt event loop unless running in interactive mode.
@@ -302,9 +361,8 @@ if __name__ == '__main__':
 
 
 
-    file = '/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/' \
-           'Bee_experiments_2016/2016-08-15_13.05.57/' \
-           '1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
+    file = '/Users/nickgravish/source_code/Tracker/test_data/1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
+
 
     vid = cv.VideoCapture(file)
 
@@ -326,6 +384,7 @@ if __name__ == '__main__':
 
     print('Loaded!')
 
+    video = VideoStreamView(frames)
 
     # p = video.imageItem.addPlot()
 
@@ -337,11 +396,11 @@ if __name__ == '__main__':
     w.resize(1200, 600)
     layout = QtGui.QGridLayout()
 
-    video = VideoStreamView(frames)
-    video.imageItem.mouseClickEvent = click
 
-    plt = pg.PlotDataItem([Height / 2], [Width / 2], symbol='o', symbolBrush=(255, 0, 0), symbolPen='w')
-    plt.setParentItem(video.imageItem)
+    # video.imageItem.mouseClickEvent = click
+    #
+    # plt = pg.PlotDataItem([Height / 2], [Width / 2], symbol='o', symbolBrush=(255, 0, 0), symbolPen='w')
+    # plt.setParentItem(video.imageItem)
 
     w.setLayout(layout)
     layout.addWidget(video)
