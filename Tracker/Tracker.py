@@ -175,15 +175,15 @@ class Tracker:
             self.exit_error()
             raise IOError('Codec issue: cannot read number of frames.')
 
-        self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
-        self.Width = self.vid.get(cv.CAP_PROP_FRAME_WIDTH)
+        self.Height = int(self.vid.get(cv.CAP_PROP_FRAME_HEIGHT))
+        self.Width = int(self.vid.get(cv.CAP_PROP_FRAME_WIDTH))
 
         if self.frame_range is None:
-            self.frame_range = (0, self.NumFrames)
+            self.frame_range = (0, int(self.NumFrames))
         else:
             # check doesn't exceed number of frames
             if self.frame_range[0] + self.frame_range[1] > self.NumFrames:
-                self.frame_range = (self.frame_range[0], self.NumFrames - self.frame_range[0])
+                self.frame_range = (int(self.frame_range[0]), int(self.NumFrames - self.frame_range[0]))
 
 
 
