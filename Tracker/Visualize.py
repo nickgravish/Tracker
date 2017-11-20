@@ -10,6 +10,74 @@ from pyqtgraph import ptime as ptime
 import cv2 as cv
 import os
 
+class VideoDataView():
+    """
+    Small class to merge a data stream view and a video view
+    """
+
+    def __init__(self, video, transpose=False, contours_data=None, associated_data=None, view=None):
+        app = pg.mkQApp()
+
+        self.v = VideoStreamView(video,
+                                 transpose=True,
+                                 contours_data=contours_data)
+
+        self.data = contours_data
+        self.tree = pg.DataTreeWidget(data=self.data[0])
+
+        self.layout = pg.LayoutWidget()
+
+        self.w1 = self.layout.addWidget(self.v, row=0, col=0)
+        # self.w2 = self.layout.addWidget(self.tree, row=0, col=1)
+        #
+        # qGraphicsGridLayout = self.layout.layout
+        # qGraphicsGridLayout.setColumnStretch(0, 2.5)
+        # qGraphicsGridLayout.setColumnStretch(1, 1)
+
+        self.layout.resize(1200, 600)
+        self.layout.show()
+
+    def update_data(self, index):
+        self.tree.setData(self.data[index])
+
+
+class DataTree(pg.DataTreeWidget):
+
+    def __init__(self, data = None):
+
+        super().__init__(data = data)
+
+        self.setEditTriggers(self.NoEditTriggers)
+
+        # to be able to decide on your own whether a particular item
+        # can be edited, connect e.g. to itemDoubleClicked
+        self.itemDoubleClicked.connect(self.checkEdit)
+
+
+    def collapseTree(self, item):
+        item.setExpanded(False)
+        for i in range(item.childCount()):
+            self.collapseTree(item.child(i))
+
+    def listAllItems(self, item=None):
+        items = []
+        if item != None:
+            items.append(item)
+        else:
+            item = self.invisibleRootItem()
+
+        for cindex in range(item.childCount()):
+            foundItems = self.listAllItems(item=item.child(cindex))
+            for f in foundItems:
+                items.append(f)
+        return items
+
+    def checkEdit(self, item, column):
+        # e.g. to allow editing only of column 1:
+        print('edit')
+
+        self.editItem(item, column)
+
 
 class VideoStreamView(pg.ImageView):
     """
@@ -53,7 +121,16 @@ class VideoStreamView(pg.ImageView):
 
         self.plot.sigPointsClicked.connect(self.clicked)
 
+        # add the tree for visualizing points
+        self.tree = pg.TableWidget(editable=True)
+        data = [{'Variable name': '', 'x': 0, 'y': 0}]
+        self.tree.setData(data)
+        # self.tree = DataTree(data=self.contours)
+        # self.tree.setData(self.contours[0], hideRoot=True)
+        # self.tree.collapseTree(self.tree.invisibleRootItem())
 
+        self.ui.gridLayout.addWidget(self.tree, 0, 4, 3, 1)
+        self.ui.gridLayout.setColumnStretch(0, 3.5)
 
         self.image = None
         self.loadFrame(1)
@@ -114,7 +191,7 @@ class VideoStreamView(pg.ImageView):
     def loadFrame(self, index):
 
         if self.is_array:
-            img = self.video[index, :,:]
+            img = self.video[int(index), :,:]
         else:
             img = self.video.getFrame(index)
 
@@ -258,7 +335,7 @@ class VideoStreamView(pg.ImageView):
 
     def setCurrentIndex(self, ind):
         """Set the currently displayed frame index."""
-        self.currentIndex = np.clip(ind, 0, self.NumFrames - 1)
+        self.currentIndex = int(np.clip(ind, 0, self.NumFrames - 1))
 
         self.loadFrame(self.currentIndex)
 
@@ -266,6 +343,10 @@ class VideoStreamView(pg.ImageView):
         self.ignoreTimeLine = True
         self.timeLine.setValue(self.tVals[self.currentIndex])
         self.ignoreTimeLine = False
+
+        # self.tree.setData(self.contours[self.currentIndex], hideRoot=True)
+        # self.tree.collapseTree(self.tree.invisibleRootItem())
+
         self.sigIndexChanged.emit(self.currentIndex)
 
     def keyPressEvent(self, ev):

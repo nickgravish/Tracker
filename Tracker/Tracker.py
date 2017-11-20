@@ -16,7 +16,7 @@ import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
 
-from Tracker.Visualize import VideoStreamView
+from Tracker.Visualize import VideoStreamView, VideoDataView
 from Tracker.DataAssociation import DataAssociator
 
 from pyqtgraph.Qt import QtCore, QtGui
@@ -62,6 +62,7 @@ class Tracker:
         self.frames_tracks = []
         self.contours = []
         self.raw_contours = []
+        self.frames_contours = []
 
     def load_data(self):
         """
@@ -415,32 +416,57 @@ class Tracker:
 
     def visualize(self):
 
+
         # Load video if not already
         if self.video_loaded is not True:
             self.load_video()
 
-        self.draw_contours()
+        if len(self.raw_contours) > 0:
+            self.draw_contours()
+            vid = self.frames_contours
+        else:
+            vid = self.frames
+
 
         if self.verbose:
             print('visualizing')
 
+        contours_tmp = [self.contours[c] for c in
+                        list(np.arange(self.frame_range[0],
+                        self.frame_range[0] + self.frame_range[1]))]
 
-        self.w = QtGui.QWidget()
-        self.w.resize(1200, 600)
-        # w.move(QtGui.QApplication.desktop().screen().rect().center() - w.rect().center())
+        self.video_data = VideoDataView(vid, contours_data=contours_tmp)
 
-        contours_tmp = [self.contours[c] for c in list(np.arange(self.frame_range[0], \
-                                                                 self.frame_range[0]+self.frame_range[1]))]
+        # self.v = VideoStreamView(self.frames_contours,
+        #                          transpose=True,
+        #                          contours_data=contours_tmp)
+        # self.tree = pg.DataTreeWidget(data=self.contours[self.frame_range[0]])
+        #
+        # # self.w = QtGui.QWidget()
+        # # self.w.resize(1200, 600)
+        #
+        # app = pg.mkQApp()
+        #
+        # # self.layout = QtGui.QGridLayout()
+        # self.layout = pg.LayoutWidget()
+        # # # self.w.setLayout(self.layout)
+        # # self.layout.addWidget(self.v, 0, 0)
+        #
+        # # self.layout = pg.GraphicsLayoutWidget()
+        # self.w1 = self.layout.addWidget(self.v, row=0, col=0)
+        # self.w2 = self.layout.addWidget(self.tree, row=0, col=1)
+        #
+        # qGraphicsGridLayout = self.layout.layout
+        # qGraphicsGridLayout.setColumnStretch(0, 2.5)
+        # qGraphicsGridLayout.setColumnStretch(1, 1)
+        #
+        #
+        # # self.layout.addWidget(self.tree, 0, 1)
+        # # self.layout.addStretch(1)
+        # self.layout.resize(1200, 600)
+        # self.layout.show()
 
-        print(len(contours_tmp))
-
-        self.v = VideoStreamView(self.frames_contours, transpose=True, contours_data=contours_tmp)
-
-        self.layout = QtGui.QGridLayout()
-        self.w.setLayout(self.layout)
-        self.layout.addWidget(self.v)
-
-        self.w.show()
+        # self.w.show()
 
         #TODO Need to handle memory clean up of visualization much better
 
@@ -464,14 +490,14 @@ if __name__ == '__main__':
     file = '/Users/nickgravish/source_code/Tracker/test_data/1_08-15-16_13-06-05.015_Mon_Aug_15_13-05-57.148_2.mp4'
 
     # Load in images to memory during construction
-    video = Tracker(file, ROI=(30, 30, 550, 1174), verbose='True', frame_range=[600,700])
+    video = Tracker(file, ROI=(30, 30, 550, 1174), verbose='True', frame_range=[600,610])
 
 
     video.load_video()
-    video.compute_background()  # form background image
-    video.remove_background()  # remove background
-    video.threshold()  # threshold to segment features
-    video.find_objects()
+    # video.compute_background()  # form background image
+    # video.remove_background()  # remove background
+    # video.threshold()  # threshold to segment features
+    # video.find_objects()
 
     video.visualize()
 
