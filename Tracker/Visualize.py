@@ -79,6 +79,77 @@ class DataTree(pg.DataTreeWidget):
         self.editItem(item, column)
 
 
+class HandTrackPoints():
+
+    def __init__(self, num_points = None):
+
+        self.num_points = num_points
+
+        if num_points is not None:
+            self.data = {'': {'x': np.random.rand(num_points), 'y': np.random.rand(num_points)},
+                         }
+        else:
+            self.data = {'': {'x': [], 'y': []}}
+
+
+    def add_xy_point(self, key = None, x = None, y = None, frame = None):
+        if key is not None:
+            self.data[key]['x'][frame] = x
+            self.data[key]['y'][frame] = y
+
+    def add_keyed_point(self, key):
+        self.data[key] = {'x': np.zeros(self.num_points),
+                          'y': np.zeros(self.num_points)}
+
+    def update_key(self, oldkey, newkey):
+        self.data[newkey] = self.data[oldkey]
+        del self.data[oldkey]
+
+        if oldkey == '':
+            self.add_keyed_point('')
+
+    def return_items(self, frame):
+        return_data = []
+
+        for key, value in self.data.items():
+            return_data.append({'Variable name': key,
+                                'x': value['x'][frame],
+                                'y': value['y'][frame]})
+
+        return return_data
+
+
+class HandTrackTable(pg.TableWidget):
+
+    def __init__(self, *args, **kwds):
+        super().__init__(*args, **kwds)
+        self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+        self.last_key = []
+        self.selected_row = 0
+
+    def appendData(self, data):
+        self.blockSignals(True)
+        super().appendData(data)
+        self.setEditable()
+        self.blockSignals(False)
+
+    def setEditable(self, editable=True):
+        self.editable = editable
+        for item in self.items:
+            if item.column() == 0:
+                item.setEditable(editable)
+            else:
+                item.setEditable(False)
+
+    def setData(self, data):
+        super().setData(data)
+        self.setCurrentCell(self.selected_row, 0)
+
+    def handleItemChanged(self, item):
+        self.last_key = item.value
+        item.itemChanged()
+        self.selected_row = item.row()
+
 class VideoStreamView(pg.ImageView):
     """
     This will take in a video container that will handle the loading. This way
@@ -113,74 +184,82 @@ class VideoStreamView(pg.ImageView):
         self.contours = contours_data
         self.associated_data = associated_data
 
-        self.plot_items = []
-        self.plot = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'k', 'width':2}
+        self.contour_plot_items = []
+        self.hand_track_plot_items = []
+        self.association_plot_items = []
+
+        self.contour_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'k', 'width':2}
                                     , pen = None, symbolSize = 10)
-        self.plot.setParentItem(self.imageItem)
+        self.contour_plots.setParentItem(self.imageItem)
         self.lastClicked = []
+        self.contour_plots.sigPointsClicked.connect(self.clicked)
 
-        self.plot.sigPointsClicked.connect(self.clicked)
+        self.hand_track_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'w', 'width':2}
+                                    , pen = None, symbolSize = 10)
+        self.hand_track_plots.setParentItem(self.imageItem)
+        self.hand_track_plots.sigPointsClicked.connect(self.clicked)
 
-        # add the tree for visualizing points
-        self.tree = pg.TableWidget(editable=True)
-        data = [{'Variable name': '', 'x': 0, 'y': 0}]
-        self.tree.setData(data)
-        # self.tree = DataTree(data=self.contours)
-        # self.tree.setData(self.contours[0], hideRoot=True)
-        # self.tree.collapseTree(self.tree.invisibleRootItem())
 
-        self.ui.gridLayout.addWidget(self.tree, 0, 4, 3, 1)
-        self.ui.gridLayout.setColumnStretch(0, 3.5)
+        self.hand_tracked_points = HandTrackPoints(num_points=self.NumFrames)
+
 
         self.image = None
         self.loadFrame(1)
         self.setImage(self.image)
         self.currentIndex = 0
 
+        # add the tree for visualizing points
+        # self.tree = pg.TableWidget(editable=True)
+        self.tree = HandTrackTable(editable = True)
+        self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+        self.tree.itemChanged.connect(self.update_handtrack)
+
+        self.data_tree = DataTree(data=self.contours)
+        self.data_tree .setData(self.contours[0], hideRoot=True)
+        self.data_tree.collapseTree(self.data_tree.invisibleRootItem())
+
+        self.splitter = QtGui.QSplitter()
+        self.splitter.setOrientation(QtCore.Qt.Horizontal)
+        self.ui.gridLayout.addWidget(self.splitter, 0, 3)
+        self.ui.gridLayout.setColumnStretch(3, 0.4)
+        self.splitter.addWidget(self.tree)
+
+        self.splitter2 = QtGui.QSplitter()
+        self.splitter.setOrientation(QtCore.Qt.Vertical)
+        self.splitter.addWidget(self.splitter2)
+        self.splitter2.addWidget(self.data_tree)
+
+        # self.splitter.setColumnStretch(4, 0.5)
+        # self.ui.gridLayout.setColumnMinimumWidth(4, 200)
+
+
         # override the wheel event zoom functionality so that can be used for timeline changnig
         self.ui.roiPlot.wheelEvent = self.wheelEvent
 
         self.imageItem.mouseClickEvent = self.ms_click
+        self.imageItem.installEventFilter(self)
+
+    def update_handtrack(self, item):
+        print(item.row())
+        print(item.column())
+        print(item.value)
+
+        last_key = self.tree.last_key
+        self.hand_tracked_points.update_key(last_key, item.value)
+        self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
 
 
-    def updatePoints(self):
+    def eventFilter(self, obj, event):
+        """
+        Handle only necessary mouse clicks 
+        """
+        if event.type() in (QtCore.QEvent.MouseButtonPress,
+                            QtCore.QEvent.MouseButtonDblClick):
+            if event.button() == QtCore.Qt.RightButton:
+                print("right")
+                return True
+        return super().eventFilter(obj, event)
 
-        if self.contours:
-
-            curr_x = []
-            curr_y = []
-
-            for c in self.contours[int(self.currentIndex)]:
-
-                curr_x.append(c['x'])
-                curr_y.append(c['y'])
-
-            print(curr_x)
-            print(curr_y)
-            print('\r\n')
-
-            self.plot_points(curr_x, curr_y)
-
-    def plot_points(self, x = [], y = []):
-
-        if not x:
-            x = [self.Height/ 2]
-            y = [self.Width/ 2]
-
-            print('plotting')
-
-        self.plot.setData(x = x, y = y)
-
-    def clicked(self, plot, points):
-
-        for p in self.lastClicked:
-            p.resetPen()
-
-        for p in points:
-            p.setPen('b', width=2)
-            print("clicked points", p.pos())
-
-        self.lastClicked = points
 
 
     def wheelEvent(self, ev):
@@ -344,6 +423,8 @@ class VideoStreamView(pg.ImageView):
         self.timeLine.setValue(self.tVals[self.currentIndex])
         self.ignoreTimeLine = False
 
+        self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+
         # self.tree.setData(self.contours[self.currentIndex], hideRoot=True)
         # self.tree.collapseTree(self.tree.invisibleRootItem())
 
@@ -404,28 +485,96 @@ class VideoStreamView(pg.ImageView):
             self.jumpFrames(n)
 
 
+    def updatePoints(self):
+
+        if self.contours:
+
+            curr_x = []
+            curr_y = []
+
+            for c in self.contours[int(self.currentIndex)]:
+
+                curr_x.append(c['x'])
+                curr_y.append(c['y'])
+
+            self.contour_plot_items = {'x': curr_x, 'y': curr_y}
+
+            # self.plot_points()
+
+            self.contour_plots.setData(self.contour_plot_items['x'], self.contour_plot_items['y'])
+
+        tmp = self.hand_tracked_points.return_items(self.currentIndex)
+        var_names = []
+        x = []
+        y = []
+
+        for element in tmp:
+            var_names.append(element['Variable name'])
+            x.append(element['x'])
+            y.append(element['y'])
+
+        if x:
+            self.hand_track_plots.setData(x, y, name=var_names)
+            # self.l = pg.LegendItem()
+            # self.l.addItem(self.hand_track_plots)
+
+    def clicked(self, plot, points):
+
+        for p in self.lastClicked:
+            p.resetPen()
+
+        for p in points:
+            p.setPen('b', width=2)
+            print("clicked points", p.pos())
+
+        self.lastClicked = points
+
+
     def ms_click(self, event):
         event.accept()
-        pos = event.pos()
 
-        x = pos.x()
-        y = pos.y()
+        if event.button() == QtCore.Qt.LeftButton:
+            pos = event.pos()
+            x = pos.x()
+            y = pos.y()
 
-        print(int(x), int(y))
-
-        # self.plot_points([x], [y])
-        #
-        #
-        # for plt in self.plot_items:
-        #     plt.setSymbolBrush(np.random.randint(0,254,1), np.random.randint(0,254,1), np.random.randint(0,254,1))
-        #
-        # self.updateImage()
+            print(int(x), int(y))
 
 
-# def click(event):
-#     event.accept()
-#     pos = event.pos()
-#     print(int(pos.x()), int(pos.y()))
+            modifiers = QtGui.QApplication.keyboardModifiers()
+            if modifiers == QtCore.Qt.ShiftModifier:
+                print('Shift+Click')
+
+                element = self.tree.selectionModel().currentIndex()
+
+                if element.row() != -1:
+                    var_name = self.tree.item(element.row(), 0).value
+
+                    self.hand_tracked_points.add_xy_point(key = var_name, x = x, y = y, frame= self.currentIndex)
+
+                    self.updateImage()
+                    self.tree.selected_row = element.row()
+                    self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+
+
+            elif modifiers == QtCore.Qt.ControlModifier:
+                print('Control+Click')
+            elif modifiers == (QtCore.Qt.ControlModifier |
+                                   QtCore.Qt.ShiftModifier):
+                print('Control+Shift+Click')
+            else:
+                print('Click')
+
+
+
+            return
+
+
+        else:
+            event.ignore()
+            return
+
+
 
 
 ## Start Qt event loop unless running in interactive mode.
