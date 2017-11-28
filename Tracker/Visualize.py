@@ -9,21 +9,31 @@ from pyqtgraph import ptime as ptime
 
 import cv2 as cv
 import os
+import json
+import os.path
 
 class VideoDataView():
     """
     Small class to merge a data stream view and a video view
     """
 
-    def __init__(self, video, transpose=False, contours_data=None, associated_data=None, view=None):
+    def __init__(self, video,
+                 video_contours,
+                 transpose=False,
+                 contours_data=None,
+                 associated_data=None,
+                 view=None,
+                 fname=None):
         app = pg.mkQApp()
 
         self.v = VideoStreamView(video,
+                                 video_contours,
                                  transpose=True,
-                                 contours_data=contours_data)
+                                 contours_data=contours_data,
+                                 fname=fname)
 
-        self.data = contours_data
-        self.tree = pg.DataTreeWidget(data=self.data[0])
+        # self.data = contours_data
+        # self.tree = pg.DataTreeWidget(data=self.data[0])
 
         self.layout = pg.LayoutWidget()
 
@@ -86,7 +96,7 @@ class HandTrackPoints():
         self.num_points = num_points
 
         if num_points is not None:
-            self.data = {'': {'x': np.random.rand(num_points), 'y': np.random.rand(num_points)},
+            self.data = {'': {'x': np.ones(num_points)*(-1), 'y': np.ones(num_points)*(-1)},
                          }
         else:
             self.data = {'': {'x': [], 'y': []}}
@@ -98,8 +108,8 @@ class HandTrackPoints():
             self.data[key]['y'][frame] = y
 
     def add_keyed_point(self, key):
-        self.data[key] = {'x': np.zeros(self.num_points),
-                          'y': np.zeros(self.num_points)}
+        self.data[key] = {'x': np.ones(self.num_points)*(-1),
+                          'y': np.ones(self.num_points)*(-1)}
 
     def update_key(self, oldkey, newkey):
         self.data[newkey] = self.data[oldkey]
@@ -112,11 +122,58 @@ class HandTrackPoints():
         return_data = []
 
         for key, value in self.data.items():
+
+            x = value['x'][frame]
+            y = value['y'][frame]
+
+            if x == -1:
+                x = ''
+                y = ''
+
             return_data.append({'Variable name': key,
-                                'x': value['x'][frame],
-                                'y': value['y'][frame]})
+                                'x': x,
+                                'y': y})
+        return return_data
+
+    def return_json(self):
+        return_data = []
+
+        for key, value in self.data.items():
+
+            x = value['x'].tolist()
+            y = value['y'].tolist()
+
+            if x == -1:
+                x = ''
+                y = ''
+
+            return_data.append({'Variable name': key,
+                                'x': x,
+                                'y': y})
 
         return return_data
+
+    def return_next_keyframe(self, frame, direction=1):
+
+        if direction == 1:
+            for k in range(frame, self.num_points, direction):
+                for key, value in self.data.items():
+                    # just need to check if x is empty
+                    x = value['x'][k]
+
+                    if x != -1:
+                        return k
+
+            return self.num_points
+        else:
+            for k in range(frame, 0, direction):
+                for key, value in self.data.items():
+                    # just need to check if x is empty
+                    x = value['x'][k]
+
+                    if x != -1:
+                        return k
+            return 0
 
 
 class HandTrackTable(pg.TableWidget):
@@ -163,12 +220,19 @@ class VideoStreamView(pg.ImageView):
     """
     sigIndexChanged = QtCore.Signal(object)
 
-    def __init__(self, video, transpose = False, contours_data = None, associated_data = None, view = None):
+    def __init__(self, video, video_contours, transpose = False, contours_data = None,
+                 associated_data = None, view = None, fname = None):
+
         super().__init__(view = view)
         pg.setConfigOptions(antialias=True)
 
         self.video = video
+        self.video_contours = video_contours
         self.transpose = transpose
+
+        self.videoname = fname
+        self.file_path = os.path.dirname(self.videoname)
+        self.hand_track_file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_handtrack.txt'
 
         if type(video) == np.ndarray:
             self.video = video
@@ -194,19 +258,13 @@ class VideoStreamView(pg.ImageView):
         self.lastClicked = []
         self.contour_plots.sigPointsClicked.connect(self.clicked)
 
-        self.hand_track_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'w', 'width':2}
-                                    , pen = None, symbolSize = 10)
+        self.hand_track_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'r', 'width':3}
+                                    , pen = None, symbolSize = 14)
         self.hand_track_plots.setParentItem(self.imageItem)
         self.hand_track_plots.sigPointsClicked.connect(self.clicked)
 
 
         self.hand_tracked_points = HandTrackPoints(num_points=self.NumFrames)
-
-
-        self.image = None
-        self.loadFrame(1)
-        self.setImage(self.image)
-        self.currentIndex = 0
 
         # add the tree for visualizing points
         # self.tree = pg.TableWidget(editable=True)
@@ -222,22 +280,71 @@ class VideoStreamView(pg.ImageView):
         self.splitter.setOrientation(QtCore.Qt.Horizontal)
         self.ui.gridLayout.addWidget(self.splitter, 0, 3)
         self.ui.gridLayout.setColumnStretch(3, 0.4)
-        self.splitter.addWidget(self.tree)
+        self.splitter.addWidget(self.data_tree)
+        self.splitter.setSizes([100, 35])
 
         self.splitter2 = QtGui.QSplitter()
         self.splitter.setOrientation(QtCore.Qt.Vertical)
         self.splitter.addWidget(self.splitter2)
-        self.splitter2.addWidget(self.data_tree)
+        self.splitter2.addWidget(self.tree)
+
+
+        self.handtrack_button = QtGui.QCheckBox()
+        self.handtrack_button.clicked.connect(self.updateImage)
+
+        self.contour_button = QtGui.QCheckBox()
+        self.contour_button.clicked.connect(self.updateImage)
+
+        self.saveBtn = QtGui.QPushButton()
+        self.saveBtn.clicked.connect(self.save_handtrack)
+
+        self.handtrack_button.setText("Handtrack")
+        self.contour_button.setText("Contours")
+        self.saveBtn.setText("Save")
+
+        self.buttons = QtGui.QSplitter()
+        # self.buttons = QtGui.QGridLayout()
+        # self.buttons.setStretchFactor(0, 0)
+
+        self.splitter.addWidget(self.buttons)
+        # self.ui.gridLayout.addWidget(self.buttons, 1, 3)
+
+        self.buttons.addWidget(self.handtrack_button)
+        self.buttons.addWidget(self.contour_button)
+        self.buttons.addWidget(self.saveBtn)
+
+        self.image = None
+        self.loadFrame(1)
+        self.setImage(self.image)
+        self.currentIndex = 0
+
+        self.noRepeatKeys = [QtCore.Qt.Key_Right, QtCore.Qt.Key_Left, QtCore.Qt.Key_Up, QtCore.Qt.Key_Down,
+                             QtCore.Qt.Key_PageUp, QtCore.Qt.Key_PageDown, QtCore.Qt.Key_W, QtCore.Qt.Key_Q,
+                             QtCore.Qt.Key_E, QtCore.Qt.Key_A, QtCore.Qt.Key_S, QtCore.Qt.Key_D]
 
         # self.splitter.setColumnStretch(4, 0.5)
         # self.ui.gridLayout.setColumnMinimumWidth(4, 200)
 
-
-        # override the wheel event zoom functionality so that can be used for timeline changnig
-        self.ui.roiPlot.wheelEvent = self.wheelEvent
+# override the wheel event zoom functionality so that can be used for timeline changnig
+        self.ui.roiPlot.wheelEvent = self.wheelROIEvent
 
         self.imageItem.mouseClickEvent = self.ms_click
         self.imageItem.installEventFilter(self)
+
+    def save_handtrack(self):
+
+        name = os.path.join(self.file_path, self.hand_track_file_name)
+
+        if os.path.exists(name) is True:
+            name = QtGui.QFileDialog.getSaveFileName(self, 'Save File')
+
+        print(name)
+        with open(name[0], 'w+') as output:
+            json.dump(self.hand_tracked_points.return_json(),
+                      output,
+                      sort_keys=True,
+                      indent=4)
+
 
     def update_handtrack(self, item):
         print(item.row())
@@ -262,15 +369,18 @@ class VideoStreamView(pg.ImageView):
 
 
 
-    def wheelEvent(self, ev):
+    def wheelROIEvent(self, ev):
         sc = ev.angleDelta().y()/8
         self.jumpFrames(sc)
+        ev.accept()
         # self.timeLine.getBounds()
 
     def loadFrame(self, index):
 
-        if self.is_array:
-            img = self.video[int(index), :,:]
+        if self.is_array and self.contour_button.isChecked():
+            img = self.video_contours[int(index), :,:]
+        elif self.is_array:
+            img = self.video[int(index), :, :]
         else:
             img = self.video.getFrame(index)
 
@@ -431,6 +541,9 @@ class VideoStreamView(pg.ImageView):
         self.sigIndexChanged.emit(self.currentIndex)
 
     def keyPressEvent(self, ev):
+        """
+        Handles initial key press decisions. If one was registered calls evalKeyState
+        """
         # print ev.key()
         if ev.key() == QtCore.Qt.Key_Space:
             if self.playRate == 0:
@@ -456,6 +569,57 @@ class VideoStreamView(pg.ImageView):
             self.evalKeyState()
         else:
             QtGui.QWidget.keyPressEvent(self, ev)
+
+    def evalKeyState(self):
+        """
+        Handle keypresses:
+        - Up/Down or w/s jump ahead 10 frames
+        - Left/Right or a/d jump ahead 1 frame
+        - Space plays movie at 30 fps
+        - End/Home jump to beginning or end
+        - q/e jump to next keyframe
+        """
+
+        if len(self.keysPressed) == 1:
+            key = list(self.keysPressed.keys())[0]
+            if key in [QtCore.Qt.Key_Right, QtCore.Qt.Key_D]:
+                self.play(20)
+                self.jumpFrames(1)
+                self.lastPlayTime = ptime.time() + 0.2  ## 2ms wait before start
+                ## This happens *after* jumpFrames, since it might take longer than 2ms
+            elif key in [QtCore.Qt.Key_Left, QtCore.Qt.Key_A]:
+                print("left")
+                self.play(-20)
+                self.jumpFrames(-1)
+                self.lastPlayTime = ptime.time() + 0.2
+            elif key in [QtCore.Qt.Key_Up, QtCore.Qt.Key_W]:
+                self.play(-100)
+            elif key in [QtCore.Qt.Key_Down, QtCore.Qt.Key_S]:
+                self.play(100)
+            elif key == QtCore.Qt.Key_PageUp:
+                self.play(-1000)
+            elif key == QtCore.Qt.Key_PageDown:
+                self.play(1000)
+            elif key == QtCore.Qt.Key_Q:
+                # jump to next keyframe forward
+                print("Q")
+                frames = self.hand_tracked_points.return_next_keyframe(self.currentIndex-1, -1)
+                self.play(20)
+                self.setCurrentIndex(frames)
+                self.lastPlayTime = ptime.time() + 0.2  ## 2ms wait before start
+                ## This happens *after* jumpFrames, since it might take longer than 2ms
+
+            elif key == QtCore.Qt.Key_E:
+                # jump to next keyframe reverse
+                print("E")
+                frames = self.hand_tracked_points.return_next_keyframe(self.currentIndex+1, 1)
+                self.play(20)
+                self.setCurrentIndex(frames)
+                self.lastPlayTime = ptime.time() + 0.2  ## 2ms wait before start
+
+        else:
+            self.play(0)
+
 
     def timeLineChanged(self):
         # (ind, time) = self.timeIndex(self.ui.timeSlider)
@@ -486,8 +650,10 @@ class VideoStreamView(pg.ImageView):
 
 
     def updatePoints(self):
+        self.contour_plots.clear()
+        self.hand_track_plots.clear()
 
-        if self.contours:
+        if self.contours and self.contour_button.isChecked():
 
             curr_x = []
             curr_y = []
@@ -498,9 +664,6 @@ class VideoStreamView(pg.ImageView):
                 curr_y.append(c['y'])
 
             self.contour_plot_items = {'x': curr_x, 'y': curr_y}
-
-            # self.plot_points()
-
             self.contour_plots.setData(self.contour_plot_items['x'], self.contour_plot_items['y'])
 
         tmp = self.hand_tracked_points.return_items(self.currentIndex)
@@ -509,14 +672,20 @@ class VideoStreamView(pg.ImageView):
         y = []
 
         for element in tmp:
-            var_names.append(element['Variable name'])
-            x.append(element['x'])
-            y.append(element['y'])
+            x_tmp = element['x']
+            y_tmp = element['y']
 
-        if x:
+            if x_tmp != '':
+                var_names.append(element['Variable name'])
+                x.append(x_tmp)
+                y.append(y_tmp)
+
+        if x and self.handtrack_button.isChecked():
             self.hand_track_plots.setData(x, y, name=var_names)
+
             # self.l = pg.LegendItem()
             # self.l.addItem(self.hand_track_plots)
+
 
     def clicked(self, plot, points):
 
@@ -531,6 +700,12 @@ class VideoStreamView(pg.ImageView):
 
 
     def ms_click(self, event):
+        """
+        Handles the mouse click events.
+            - Shift + click records a point to the selected handtracked row
+
+        """
+
         event.accept()
 
         if event.button() == QtCore.Qt.LeftButton:
@@ -564,8 +739,6 @@ class VideoStreamView(pg.ImageView):
                 print('Control+Shift+Click')
             else:
                 print('Click')
-
-
 
             return
 

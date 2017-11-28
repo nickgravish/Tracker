@@ -423,9 +423,6 @@ class Tracker:
 
         if len(self.raw_contours) > 0:
             self.draw_contours()
-            vid = self.frames_contours
-        else:
-            vid = self.frames
 
 
         if self.verbose:
@@ -435,7 +432,10 @@ class Tracker:
                         list(np.arange(self.frame_range[0],
                         self.frame_range[0] + self.frame_range[1]))]
 
-        self.video_data = VideoDataView(vid, contours_data=contours_tmp)
+        self.video_data = VideoDataView(self.frames,
+                                        self.frames_contours,
+                                        contours_data=contours_tmp,
+                                        fname=self.videoname)
 
         # self.v = VideoStreamView(self.frames_contours,
         #                          transpose=True,
