@@ -107,6 +107,12 @@ class HandTrackPoints():
             self.data[key]['x'][frame] = x
             self.data[key]['y'][frame] = y
 
+    def remove_xy_point(self, key = None, frame = None):
+        if key is not None:
+            self.data[key]['x'][frame] = -1
+            self.data[key]['y'][frame] = -1
+
+
     def add_keyed_point(self, key):
         self.data[key] = {'x': np.ones(self.num_points)*(-1),
                           'y': np.ones(self.num_points)*(-1)}
@@ -142,7 +148,11 @@ class HandTrackPoints():
 
         # remove the empty key
         tmp = dict(self.data)
-        del tmp['']
+        try:
+            del tmp['']
+        except:
+            []
+
         return tmp
 
         # return_data = []
@@ -334,7 +344,7 @@ class VideoStreamView(pg.ImageView):
 
         self.noRepeatKeys = [QtCore.Qt.Key_Right, QtCore.Qt.Key_Left, QtCore.Qt.Key_Up, QtCore.Qt.Key_Down,
                              QtCore.Qt.Key_PageUp, QtCore.Qt.Key_PageDown, QtCore.Qt.Key_W, QtCore.Qt.Key_Q,
-                             QtCore.Qt.Key_E, QtCore.Qt.Key_A, QtCore.Qt.Key_S, QtCore.Qt.Key_D]
+                             QtCore.Qt.Key_E, QtCore.Qt.Key_A, QtCore.Qt.Key_S, QtCore.Qt.Key_D, QtCore.Qt.Key_R]
 
         # self.splitter.setColumnStretch(4, 0.5)
         # self.ui.gridLayout.setColumnMinimumWidth(4, 200)
@@ -367,6 +377,7 @@ class VideoStreamView(pg.ImageView):
         with open(name[0], 'r') as input:
             data = json.load(input)
             self.hand_tracked_points.set_data(data)
+            self.hand_tracked_points.add_keyed_point('')
 
     def update_handtrack(self, item):
         print(item.row())
@@ -600,6 +611,7 @@ class VideoStreamView(pg.ImageView):
         - Space plays movie at 30 fps
         - End/Home jump to beginning or end
         - q/e jump to next keyframe
+        - r erases the selected point
         """
 
         if len(self.keysPressed) == 1:
@@ -638,6 +650,14 @@ class VideoStreamView(pg.ImageView):
                 self.play(20)
                 self.setCurrentIndex(frames)
                 self.lastPlayTime = ptime.time() + 0.2  ## 2ms wait before start
+
+            elif key == QtCore.Qt.Key_R:
+                # jump to next keyframe forward
+                print("R")
+                element = self.tree.selectionModel().currentIndex()
+                var_name = self.tree.item(element.row(), 0).value
+                self.hand_tracked_points.remove_xy_point(key=var_name, frame=self.currentIndex)
+
 
         else:
             self.play(0)
