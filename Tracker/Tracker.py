@@ -437,6 +437,8 @@ class Tracker:
                                         contours_data=contours_tmp,
                                         fname=self.videoname)
 
+        return self.video_data
+
         # self.v = VideoStreamView(self.frames_contours,
         #                          transpose=True,
         #                          contours_data=contours_tmp)

@@ -11,6 +11,7 @@ import cv2 as cv
 import os
 import json
 import os.path
+import copy
 
 class VideoDataView():
     """
@@ -26,7 +27,7 @@ class VideoDataView():
                  fname=None):
         app = pg.mkQApp()
 
-        self.v = VideoStreamView(video,
+        self.video_stream = VideoStreamView(video,
                                  video_contours,
                                  transpose=True,
                                  contours_data=contours_data,
@@ -37,7 +38,7 @@ class VideoDataView():
 
         self.layout = pg.LayoutWidget()
 
-        self.w1 = self.layout.addWidget(self.v, row=0, col=0)
+        self.w1 = self.layout.addWidget(self.video_stream, row=0, col=0)
         # self.w2 = self.layout.addWidget(self.tree, row=0, col=1)
         #
         # qGraphicsGridLayout = self.layout.layout
@@ -237,13 +238,18 @@ class VideoStreamView(pg.ImageView):
 
 
     """
+
     sigIndexChanged = QtCore.Signal(object)
+    sigHandtrackPointChanged = QtCore.Signal(object, object)
 
     def __init__(self, video, video_contours, transpose = False, contours_data = None,
                  associated_data = None, view = None, fname = None):
 
         super().__init__(view = view)
         pg.setConfigOptions(antialias=True)
+
+        self.last_key = None
+        self.last_item = None
 
         self.video = video
         self.video_contours = video_contours
@@ -379,15 +385,32 @@ class VideoStreamView(pg.ImageView):
             self.hand_tracked_points.set_data(data)
             self.hand_tracked_points.add_keyed_point('')
 
-    def update_handtrack(self, item):
-        print(item.row())
-        print(item.column())
-        print(item.value)
+    def update_handtrack(self, item, value = None, last_key = None):
 
-        last_key = self.tree.last_key
-        self.hand_tracked_points.update_key(last_key, item.value)
-        self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+        # for tying together multiple tables
 
+        if last_key is None:
+            self.last_key = self.tree.last_key
+        else:
+            self.last_key = last_key
+
+        try:
+            print("item passed")
+            print(item.row())
+            print(item.column())
+            print(item.value)
+            self.last_item = item.value
+            self.hand_tracked_points.update_key(self.last_key, self.last_item)
+            self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+
+            # only emit if organically called
+            self.sigHandtrackPointChanged.emit(item, self.last_item, self.last_key)
+        except:
+            print("item triggered", value)
+            print(self.last_key)
+            self.last_item = value
+            self.hand_tracked_points.update_key(self.last_key, self.last_item)
+            self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
 
     def eventFilter(self, obj, event):
         """
@@ -557,6 +580,11 @@ class VideoStreamView(pg.ImageView):
 
     def setCurrentIndex(self, ind):
         """Set the currently displayed frame index."""
+
+        # break out of inf loops from connected timelines signal
+        if self.currentIndex == ind:
+            return
+
         self.currentIndex = int(np.clip(ind, 0, self.NumFrames - 1))
 
         self.loadFrame(self.currentIndex)
