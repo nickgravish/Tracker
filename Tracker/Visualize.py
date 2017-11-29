@@ -135,23 +135,32 @@ class HandTrackPoints():
                                 'y': y})
         return return_data
 
+    def set_data(self, data):
+        self.data = data
+
     def return_json(self):
-        return_data = []
 
-        for key, value in self.data.items():
+        # remove the empty key
+        tmp = dict(self.data)
+        del tmp['']
+        return tmp
 
-            x = value['x'].tolist()
-            y = value['y'].tolist()
-
-            if x == -1:
-                x = ''
-                y = ''
-
-            return_data.append({'Variable name': key,
-                                'x': x,
-                                'y': y})
-
-        return return_data
+        # return_data = []
+        #
+        # for key, value in self.data.items():
+        #
+        #     x = value['x'].tolist()
+        #     y = value['y'].tolist()
+        #
+        #     if x == -1:
+        #         x = ''
+        #         y = ''
+        #
+        #     return_data.append({'Variable name': key,
+        #                         'x': x,
+        #                         'y': y})
+        #
+        # return return_data
 
     def return_next_keyframe(self, frame, direction=1):
 
@@ -298,9 +307,13 @@ class VideoStreamView(pg.ImageView):
         self.saveBtn = QtGui.QPushButton()
         self.saveBtn.clicked.connect(self.save_handtrack)
 
+        self.loadBtn = QtGui.QPushButton()
+        self.loadBtn.clicked.connect(self.load_handtrack)
+
         self.handtrack_button.setText("Handtrack")
         self.contour_button.setText("Contours")
         self.saveBtn.setText("Save")
+        self.loadBtn.setText("Load")
 
         self.buttons = QtGui.QSplitter()
         # self.buttons = QtGui.QGridLayout()
@@ -312,6 +325,7 @@ class VideoStreamView(pg.ImageView):
         self.buttons.addWidget(self.handtrack_button)
         self.buttons.addWidget(self.contour_button)
         self.buttons.addWidget(self.saveBtn)
+        self.buttons.addWidget(self.loadBtn)
 
         self.image = None
         self.loadFrame(1)
@@ -345,6 +359,14 @@ class VideoStreamView(pg.ImageView):
                       sort_keys=True,
                       indent=4)
 
+    def load_handtrack(self):
+
+        name = QtGui.QFileDialog.getOpenFileName(self, 'Save File')
+
+        print(name)
+        with open(name[0], 'r') as input:
+            data = json.load(input)
+            self.hand_tracked_points.set_data(data)
 
     def update_handtrack(self, item):
         print(item.row())
