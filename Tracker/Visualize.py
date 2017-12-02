@@ -240,7 +240,7 @@ class VideoStreamView(pg.ImageView):
     """
 
     sigIndexChanged = QtCore.Signal(object)
-    sigHandtrackPointChanged = QtCore.Signal(object, object)
+    sigHandtrackPointChanged = QtCore.Signal(object, object, object)
 
     def __init__(self, video, video_contours, transpose = False, contours_data = None,
                  associated_data = None, view = None, fname = None):
@@ -386,7 +386,9 @@ class VideoStreamView(pg.ImageView):
             self.hand_tracked_points.add_keyed_point('')
 
     def update_handtrack(self, item, value = None, last_key = None):
-
+        """
+        Has functionality to g 
+        """
         # for tying together multiple tables
 
         if last_key is None:
