@@ -133,7 +133,7 @@ class HandTrackPoints():
             x = value['x'][frame]
             y = value['y'][frame]
 
-            if x == -1:
+            if x < 0:
                 x = ''
                 y = ''
 
@@ -153,6 +153,22 @@ class HandTrackPoints():
             del tmp['']
         except:
             []
+
+        for name, item in tmp.items():
+            x = item['x']
+            y = item['y']
+
+            x_new = []
+            y_new = []
+            frames = []
+
+            for idx, element in enumerate(x):
+                if element < 0:
+                    x_new.append(x[idx])
+                    y_new.append(y[idx])
+                    frames.append(idx)
+
+            tmp[name] = {'x': x_new, 'y': y_new, 'frames': frames}
 
         return tmp
 
@@ -240,7 +256,8 @@ class VideoStreamView(pg.ImageView):
     """
 
     sigIndexChanged = QtCore.Signal(object)
-    sigHandtrackPointChanged = QtCore.Signal(object, object, object)
+    sigHandtrackPointNameChanged = QtCore.Signal(object, object, object)
+    sigHandtrackPointValChanged = QtCore.Signal(object, object)
 
     def __init__(self, video, video_contours, transpose = False, contours_data = None,
                  associated_data = None, view = None, fname = None):
@@ -367,23 +384,30 @@ class VideoStreamView(pg.ImageView):
 
         if os.path.exists(name) is True:
             name = QtGui.QFileDialog.getSaveFileName(self, 'Save File')
+            name = name[0]
 
         print(name)
-        with open(name[0], 'w+') as output:
-            json.dump(self.hand_tracked_points.return_json(),
-                      output,
-                      sort_keys=True,
-                      indent=4)
+        if name is not '':
+            with open(name, 'w+') as output:
+                json.dump(self.hand_tracked_points.return_json(),
+                          output,
+                          sort_keys=True,
+                          indent=4)
 
     def load_handtrack(self):
 
-        name = QtGui.QFileDialog.getOpenFileName(self, 'Save File')
+        name = os.path.join(self.file_path, self.hand_track_file_name)
+
+        if os.path.exists(name) is True:
+            name = QtGui.QFileDialog.getOpenFileName(self, 'Save File')
+            name = name[0]
 
         print(name)
-        with open(name[0], 'r') as input:
-            data = json.load(input)
-            self.hand_tracked_points.set_data(data)
-            self.hand_tracked_points.add_keyed_point('')
+        if name is not '':
+            with open(name, 'r') as input:
+                data = json.load(input)
+                self.hand_tracked_points.set_data(data)
+                self.hand_tracked_points.add_keyed_point('')
 
     def update_handtrack(self, item, value = None, last_key = None):
         """
@@ -406,13 +430,17 @@ class VideoStreamView(pg.ImageView):
             self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
 
             # only emit if organically called
-            self.sigHandtrackPointChanged.emit(item, self.last_item, self.last_key)
+            self.sigHandtrackPointNameChanged.emit(item, self.last_item, self.last_key)
         except:
             print("item triggered", value)
             print(self.last_key)
             self.last_item = value
             self.hand_tracked_points.update_key(self.last_key, self.last_item)
             self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+
+    def update_handtrack_point(self, x, y):
+        # values of -2 indicate a point has been selected in a different video
+        self.hand_tracked_points.add_xy_point(key=self.last_item, x=-2, y=-2, frame=self.currentIndex)
 
     def eventFilter(self, obj, event):
         """
@@ -803,6 +831,7 @@ class VideoStreamView(pg.ImageView):
                     self.tree.selected_row = element.row()
                     self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
 
+                    self.sigHandtrackPointValChanged.emit(x,y)
 
             elif modifiers == QtCore.Qt.ControlModifier:
                 print('Control+Click')

@@ -35,13 +35,12 @@ vv2 = video2.visualize()
 vv1.video_stream.sigIndexChanged.connect(vv2.video_stream.setCurrentIndex)
 vv2.video_stream.sigIndexChanged.connect(vv1.video_stream.setCurrentIndex)
 
-# hand_tracked_points = HandTrackPoints(num_points=vv1.video_stream.NumFrames)
-#
-# vv1.video_stream.hand_tracked_points = hand_tracked_points
-# vv2.video_stream.hand_tracked_points = hand_tracked_points
+vv1.video_stream.sigHandtrackPointNameChanged.connect(vv2.video_stream.update_handtrack)
+vv2.video_stream.sigHandtrackPointNameChanged.connect(vv1.video_stream.update_handtrack)
 
-vv1.video_stream.sigHandtrackPointChanged.connect(vv2.video_stream.update_handtrack)
-vv2.video_stream.sigHandtrackPointChanged.connect(vv1.video_stream.update_handtrack)
+vv1.video_stream.sigHandtrackPointValChanged.connect(vv2.video_stream.update_handtrack_point)
+vv2.video_stream.sigHandtrackPointValChanged.connect(vv1.video_stream.update_handtrack_point)
+
 
 if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
     QtGui.QApplication.instance().exec_()
