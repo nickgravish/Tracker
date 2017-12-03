@@ -163,7 +163,7 @@ class HandTrackPoints():
             frames = []
 
             for idx, element in enumerate(x):
-                if element < 0:
+                if element > 0:
                     x_new.append(x[idx])
                     y_new.append(y[idx])
                     frames.append(idx)

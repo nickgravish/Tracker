@@ -6,12 +6,16 @@ import sys
 
 app = QtGui.QApplication([])
 
-file = '/Users/nickgravish/source_code/Tracker/test_data/C001H001S0031.avi.mp4'
-file2 = '/Users/nickgravish/source_code/Tracker/test_data/C002H001S0031.avi.mp4'
+# file = '/Users/nickgravish/source_code/Tracker/test_data/C001H001S0031.avi.mp4'
+# file2 = '/Users/nickgravish/source_code/Tracker/test_data/C002H001S0031.avi.mp4'
+
+file ='/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/Bee_Foraging_Experiments_Summer_2015/Photron/07_29_2015/C001H001S0004.avi.mp4'
+file2 ='/Users/nickgravish/Dropbox/Harvard/HighThroughputExpt/Bee_Foraging_Experiments_Summer_2015/Photron/07_29_2015/C002H001S0004.avi.mp4'
+
 
 # Load in images to memory during construction
-video = Tracker(file, verbose='True', frame_range=(1000,100), min_object_size=20)
-video2 = Tracker(file2, verbose='True', frame_range=(1000,100), min_object_size=20)
+video = Tracker(file, verbose='True', frame_range=None, min_object_size=20)
+video2 = Tracker(file2, verbose='True', frame_range=None, min_object_size=20)
 
 # video.threshold_val = 0.5
 
