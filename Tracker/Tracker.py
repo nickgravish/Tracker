@@ -8,20 +8,20 @@ import json
 import os
 import glob
 import sys
+import copy
+from pyqtgraph.Qt import QtCore, QtGui
+
 
 sys.path.append('/Users/nickgravish/Dropbox/Python/')
-sys.path.append('/Users/nickgravish/Dropbox/source_code/Tracker')
+# sys.path.append('/Users/nickgravish/Dropbox/source_code/Tracker')
 
 import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
 
-from Tracker.Visualize import VideoStreamView, VideoDataView
-from Tracker.DataAssociation import DataAssociator
+from .DataAssociation import DataAssociator
+from .Visualize import VideoDataView
 
-from pyqtgraph.Qt import QtCore, QtGui
-
-import copy
 
 class Tracker:
 

@@ -1,6 +1,5 @@
 
 from Tracker.Tracker import Tracker
-from Tracker.Visualize import HandTrackPoints
 from pyqtgraph.Qt import QtCore, QtGui
 import sys
 

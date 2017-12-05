@@ -7,13 +7,13 @@ import os
 import glob
 
 sys.path.append('/Users/nickgravish/Dropbox/Python/')
-import Tracker.Kalman as Kalman
+import Kalman as Kalman
 import json
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 
-from Tracker.Visualize import VideoStreamView
+from Visualize import VideoStreamView
 
 class KalmanParameters():
     def __init__(self):
@@ -56,7 +56,7 @@ class Contours():
 
 
 
-class DataAssociator():
+class DataAssociator:
     """
     This class is originally from and has been modified
     https://github.com/florisvb/multi_tracker/blob/master/multi_tracker_analysis/Kalman.py

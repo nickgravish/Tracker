@@ -1,10 +1,9 @@
 
 
-
 import numpy as np
 from pyqtgraph.Qt import QtCore, QtGui
-import pyqtgraph as pg
 
+import pyqtgraph as pg
 from pyqtgraph import ptime as ptime
 
 import cv2 as cv
@@ -13,7 +12,7 @@ import json
 import os.path
 import copy
 
-class VideoDataView():
+class VideoDataView:
     """
     Small class to merge a data stream view and a video view
     """
@@ -25,6 +24,7 @@ class VideoDataView():
                  associated_data=None,
                  view=None,
                  fname=None):
+
         app = pg.mkQApp()
 
         self.video_stream = VideoStreamView(video,
@@ -142,8 +142,15 @@ class HandTrackPoints():
                                 'y': y})
         return return_data
 
-    def set_data(self, data):
-        self.data = data
+    def set_data(self, data_in):
+        self.data = {'': {'x': np.ones(self.num_points) * (-1), 'y': np.ones(self.num_points) * (-1)},
+                     }
+
+        for name, item  in data_in.items():
+            self.add_keyed_point(name)
+            for frm, x, y in zip(data_in[name]['frames'], data_in[name]['x'], data_in[name]['y']):
+                self.data[name]['x'][frm] = x
+                self.data[name]['y'][frm] = y
 
     def return_json(self):
 
@@ -219,6 +226,7 @@ class HandTrackTable(pg.TableWidget):
         self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
         self.last_key = []
         self.selected_row = 0
+        self.clicked.connect(self.row_clicked)
 
     def appendData(self, data):
         self.blockSignals(True)
@@ -243,6 +251,10 @@ class HandTrackTable(pg.TableWidget):
         item.itemChanged()
         self.selected_row = item.row()
 
+    def row_clicked(self, clickedIndex):
+        print("Clicked ", clickedIndex.row())
+
+
 class VideoStreamView(pg.ImageView):
     """
     This will take in a video container that will handle the loading. This way
@@ -260,7 +272,7 @@ class VideoStreamView(pg.ImageView):
     sigHandtrackPointValChanged = QtCore.Signal(object, object)
 
     def __init__(self, video, video_contours, transpose = False, contours_data = None,
-                 associated_data = None, view = None, fname = None):
+                 associated_data = None, view = None, fname = None, click_fcn = None):
 
         super().__init__(view = view)
         pg.setConfigOptions(antialias=True)
@@ -274,7 +286,7 @@ class VideoStreamView(pg.ImageView):
 
         self.videoname = fname
         self.file_path = os.path.dirname(self.videoname)
-        self.hand_track_file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_handtrack.txt'
+        self.hand_track_file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_handtrack.json'
 
         if type(video) == np.ndarray:
             self.video = video
@@ -286,6 +298,9 @@ class VideoStreamView(pg.ImageView):
             self.Height = self.video.getHeight()
             self.Width = self.video.getWidth()
             self.is_array = False
+
+        if len(contours_data) == 0:
+            contours_data = [[] for k in self.video]
 
         self.contours = contours_data
         self.associated_data = associated_data
@@ -372,7 +387,7 @@ class VideoStreamView(pg.ImageView):
         # self.splitter.setColumnStretch(4, 0.5)
         # self.ui.gridLayout.setColumnMinimumWidth(4, 200)
 
-# override the wheel event zoom functionality so that can be used for timeline changnig
+        # override the wheel event zoom functionality so that can be used for timeline changnig
         self.ui.roiPlot.wheelEvent = self.wheelROIEvent
 
         self.imageItem.mouseClickEvent = self.ms_click
@@ -399,7 +414,7 @@ class VideoStreamView(pg.ImageView):
         name = os.path.join(self.file_path, self.hand_track_file_name)
 
         if os.path.exists(name) is True:
-            name = QtGui.QFileDialog.getOpenFileName(self, 'Save File')
+            name = QtGui.QFileDialog.getOpenFileName(self, 'Save File', self.file_path)
             name = name[0]
 
         print(name)
@@ -766,10 +781,15 @@ class VideoStreamView(pg.ImageView):
             self.contour_plot_items = {'x': curr_x, 'y': curr_y}
             self.contour_plots.setData(self.contour_plot_items['x'], self.contour_plot_items['y'])
 
+
+        element = self.tree.selectionModel().currentIndex()
+        var_name = self.tree.item(element.row(), 0).value
+
         tmp = self.hand_tracked_points.return_items(self.currentIndex)
         var_names = []
         x = []
         y = []
+        col = []
 
         for element in tmp:
             x_tmp = element['x']
@@ -780,11 +800,17 @@ class VideoStreamView(pg.ImageView):
                 x.append(x_tmp)
                 y.append(y_tmp)
 
-        if x and self.handtrack_button.isChecked():
-            self.hand_track_plots.setData(x, y, name=var_names)
+                if element['Variable name'] == var_name:
+                    col.append({'color': 'b'})
+                    self.hand_track_plots.setData(x_tmp, y_tmp, name=var_names, symbolPen = {'color': 'b'})
+                else:
+                    col.append({'color': 'r'})
 
             # self.l = pg.LegendItem()
             # self.l.addItem(self.hand_track_plots)
+        print(col)
+        if x and self.handtrack_button.isChecked():
+            self.hand_track_plots.setData(x, y, name=var_names)
 
 
     def clicked(self, plot, points):
@@ -797,7 +823,43 @@ class VideoStreamView(pg.ImageView):
             print("clicked points", p.pos())
 
         self.lastClicked = points
-
+    #
+    # def table_click(self):
+    #     element = self.tree.selectionModel().currentIndex()
+    #     var_name = self.tree.item(element.row(), 0).value
+    #     print('var_name')
+    #
+    #     # self.tree.selected_row = element.row()
+    #     # self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+    #
+    #     self.hand_track_plots.clear()
+    #
+    #     tmp = self.hand_tracked_points.return_items(self.currentIndex)
+    #     var_names = []
+    #     x = []
+    #     y = []
+    #     col = []
+    #
+    #     for element in tmp:
+    #         x_tmp = element['x']
+    #         y_tmp = element['y']
+    #
+    #         if x_tmp != '':
+    #             var_names.append(element['Variable name'])
+    #             x.append(x_tmp)
+    #             y.append(y_tmp)
+    #
+    #             if element['Variable name'] == var_name:
+    #                 col.append('w')
+    #             else:
+    #                 col.append('r')
+    #
+    #     if x and self.handtrack_button.isChecked():
+    #         self.hand_track_plots.setData(x, y, name=var_names, color = col)
+    #
+    #         # self.l = pg.LegendItem()
+    #         # self.l.addItem(self.hand_track_plots)
+    #
 
     def ms_click(self, event):
         """
@@ -805,8 +867,6 @@ class VideoStreamView(pg.ImageView):
             - Shift + click records a point to the selected handtracked row
 
         """
-
-        event.accept()
 
         if event.button() == QtCore.Qt.LeftButton:
             pos = event.pos()
@@ -832,9 +892,33 @@ class VideoStreamView(pg.ImageView):
                     self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
 
                     self.sigHandtrackPointValChanged.emit(x,y)
+                    event.accept()
 
             elif modifiers == QtCore.Qt.ControlModifier:
                 print('Control+Click')
+
+                # corners = np.array([[x, y]]).astype('float32')
+                # criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)  # for subpixel detector
+                # # dont centroid vertical post
+                # cv.cornerSubPix(self.video[self.currentIndex], corners, (11, 11), (-1, -1), criteria)
+                # x, y = corners[0][0], corners[0][1]
+                #
+                # element = self.tree.selectionModel().currentIndex()
+                #
+                # if element.row() != -1:
+                #     var_name = self.tree.item(element.row(), 0).value
+                #
+                #     self.hand_tracked_points.add_xy_point(key = var_name, x = x, y = y, frame= self.currentIndex)
+                #
+                #     self.updateImage()
+                #     self.tree.selected_row = element.row()
+                #     self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
+                #
+                #
+                #     self.sigHandtrackPointValChanged.emit(x,y)
+                #     event.accept()
+
+
             elif modifiers == (QtCore.Qt.ControlModifier |
                                    QtCore.Qt.ShiftModifier):
                 print('Control+Shift+Click')
@@ -842,7 +926,6 @@ class VideoStreamView(pg.ImageView):
                 print('Click')
 
             return
-
 
         else:
             event.ignore()
