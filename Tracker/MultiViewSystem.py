@@ -44,7 +44,10 @@ class MultiViewSystem:
         self.vv1.video_stream.sigHandtrackPointValChanged.connect(self.vv2.video_stream.update_handtrack_point)
         self.vv2.video_stream.sigHandtrackPointValChanged.connect(self.vv1.video_stream.update_handtrack_point)
 
-        print("test")
+        self.vv1.video_stream.sigHandTrackLoaded.connect(self.vv2.video_stream.other_file_loaded)
+        self.vv2.video_stream.sigHandTrackLoaded.connect(self.vv1.video_stream.other_file_loaded)
+
+print("test")
 
 
 class MultiDataView():
@@ -75,6 +78,8 @@ class MultiDataView():
 
 
 class MultiVideoStreamView(VideoStreamView):
+
+    sigHandTrackLoaded = QtCore.Signal(object)
 
     def __init__(self, video, video_contours, transpose = False, contours_data = None,
                  associated_data = None, view = None, fname = None):
@@ -144,9 +149,33 @@ class MultiVideoStreamView(VideoStreamView):
                     self.sigHandtrackPointValChanged.emit(x,y)
                     event.accept()
 
+    def load_handtrack(self):
+        print('Overloaded')
 
+        name = os.path.join(self.file_path, self.hand_track_file_name)
 
+        if os.path.exists(name) is True:
+            name = QtGui.QFileDialog.getOpenFileName(self, 'Save File', self.file_path)
+            name = name[0]
 
+        print(name)
+        if name is not '':
+            with open(name, 'r') as input:
+                data = json.load(input)
+                self.hand_tracked_points.set_data(data)
+                self.hand_tracked_points.add_keyed_point('')
         else:
             event.ignore()
             return
+
+        self.sigHandTrackLoaded.emit(data)
+
+    def other_file_loaded(self, data):
+
+        for name, vars in data.items():
+            self.hand_tracked_points.add_keyed_point(name)
+
+            for pts in vars['x']:
+                self.hand_tracked_points.add_xy_point(key=name,
+                                                      x=-2, y=-2,
+                                                      frame=vars['frames'])

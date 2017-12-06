@@ -11,13 +11,7 @@ import sys
 import copy
 from pyqtgraph.Qt import QtCore, QtGui
 
-
-sys.path.append('/Users/nickgravish/Dropbox/Python/')
-# sys.path.append('/Users/nickgravish/Dropbox/source_code/Tracker')
-
-import opencv_helper.opencv_helper as cvhlp
-
-import pyqtgraph as pg
+import Tracker.opencv_helper as cvhlp
 
 from .DataAssociation import DataAssociator
 from .Visualize import VideoDataView

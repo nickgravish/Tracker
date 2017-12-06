@@ -6,14 +6,13 @@ import sys
 import os
 import glob
 
-sys.path.append('/Users/nickgravish/Dropbox/Python/')
-import Kalman as Kalman
+import Tracker.Kalman
 import json
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 
-from Visualize import VideoStreamView
+from .Visualize import VideoStreamView
 
 class KalmanParameters():
     def __init__(self):
