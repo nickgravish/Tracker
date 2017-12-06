@@ -89,6 +89,10 @@ class MultiVideoStreamView(VideoStreamView):
         Handles the mouse click events.
             - Shift + click records a point to the selected handtracked row
         """
+
+        for p in self.lastClicked:
+            p.resetPen()
+
         print("clc")
         event.accept()
 

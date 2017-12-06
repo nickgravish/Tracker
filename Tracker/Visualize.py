@@ -143,8 +143,9 @@ class HandTrackPoints():
         return return_data
 
     def set_data(self, data_in):
-        self.data = {'': {'x': np.ones(self.num_points) * (-1), 'y': np.ones(self.num_points) * (-1)},
-                     }
+        self.data = {'': {'x': np.ones(self.num_points) * (-1),
+                          'y': np.ones(self.num_points) * (-1)},
+                    }
 
         for name, item  in data_in.items():
             self.add_keyed_point(name)
@@ -254,6 +255,9 @@ class HandTrackTable(pg.TableWidget):
     def row_clicked(self, clickedIndex):
         print("Clicked ", clickedIndex.row())
 
+    def setClickedRow(self, var_name):
+        var_names = [tmp.value for tmp in self.item]
+        self.setCurrentCell(self.selected_row, 0)
 
 class VideoStreamView(pg.ImageView):
     """
@@ -309,16 +313,20 @@ class VideoStreamView(pg.ImageView):
         self.hand_track_plot_items = []
         self.association_plot_items = []
 
-        self.contour_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'k', 'width':2}
-                                    , pen = None, symbolSize = 10)
+        self.contour_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None,
+                                             symbolPen={'color': 'k', 'width':2},
+                                             pen = None, symbolSize = 10)
+
         self.contour_plots.setParentItem(self.imageItem)
         self.lastClicked = []
         self.contour_plots.sigPointsClicked.connect(self.clicked)
 
-        self.hand_track_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None, symbolPen={'color': 'r', 'width':3}
-                                    , pen = None, symbolSize = 14)
+        self.hand_track_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None,
+                                                symbolPen={'color': 'r', 'width':3},
+                                                pen = None, symbolSize = 14)
+
         self.hand_track_plots.setParentItem(self.imageItem)
-        self.hand_track_plots.sigPointsClicked.connect(self.clicked)
+        self.hand_track_plots.sigPointsClicked.connect(self.handtrack_clicked)
 
 
         self.hand_tracked_points = HandTrackPoints(num_points=self.NumFrames)
@@ -330,7 +338,7 @@ class VideoStreamView(pg.ImageView):
         self.tree.itemChanged.connect(self.update_handtrack)
 
         self.data_tree = DataTree(data=self.contours)
-        self.data_tree .setData(self.contours[0], hideRoot=True)
+        self.data_tree.setData(self.contours[0], hideRoot=True)
         self.data_tree.collapseTree(self.data_tree.invisibleRootItem())
 
         self.splitter = QtGui.QSplitter()
@@ -348,6 +356,7 @@ class VideoStreamView(pg.ImageView):
 
         self.handtrack_button = QtGui.QCheckBox()
         self.handtrack_button.clicked.connect(self.updateImage)
+        self.handtrack_button.setCheckState(QtCore.Qt.Checked)
 
         self.contour_button = QtGui.QCheckBox()
         self.contour_button.clicked.connect(self.updateImage)
@@ -768,6 +777,7 @@ class VideoStreamView(pg.ImageView):
         self.contour_plots.clear()
         self.hand_track_plots.clear()
 
+        ###### Contours
         if self.contours and self.contour_button.isChecked():
 
             curr_x = []
@@ -781,9 +791,12 @@ class VideoStreamView(pg.ImageView):
             self.contour_plot_items = {'x': curr_x, 'y': curr_y}
             self.contour_plots.setData(self.contour_plot_items['x'], self.contour_plot_items['y'])
 
+        ###### Hand tracked points
+        # element = self.tree.selectionModel().currentIndex()
+        # var_name = self.tree.item(element.row(), 0).value
+        var_name = self.tree.item(self.tree.currentRow(), 0).value
 
-        element = self.tree.selectionModel().currentIndex()
-        var_name = self.tree.item(element.row(), 0).value
+        print(var_name)
 
         tmp = self.hand_tracked_points.return_items(self.currentIndex)
         var_names = []
@@ -801,16 +814,40 @@ class VideoStreamView(pg.ImageView):
                 y.append(y_tmp)
 
                 if element['Variable name'] == var_name:
-                    col.append({'color': 'b'})
-                    self.hand_track_plots.setData(x_tmp, y_tmp, name=var_names, symbolPen = {'color': 'b'})
+                    col.append('b')
+                    self.hand_track_plots.setData(x, y, name=var_names)
                 else:
-                    col.append({'color': 'r'})
+                    col.append('r')
 
             # self.l = pg.LegendItem()
             # self.l.addItem(self.hand_track_plots)
         print(col)
         if x and self.handtrack_button.isChecked():
             self.hand_track_plots.setData(x, y, name=var_names)
+
+    def handtrack_clicked(self, plot, points):
+
+        tmp = self.hand_tracked_points.return_items(self.currentIndex)
+
+        for p in self.lastClicked:
+            p.resetPen()
+
+        for p in points:
+            x, y = p.pos()
+
+            for element in tmp:
+                if (element['x'] == x) & (element['y'] == y):
+                    print(element['Variable name'])
+
+                    items = self.tree.findItems(element['Variable name'],
+                                                QtCore.Qt.MatchExactly)
+                    for item in items:
+                        print(item.value, item.row())
+                        self.tree.setCurrentCell(item.row(), 0)
+
+            p.setPen('b', width=2)
+
+        self.lastClicked = points
 
 
     def clicked(self, plot, points):
@@ -867,6 +904,12 @@ class VideoStreamView(pg.ImageView):
             - Shift + click records a point to the selected handtracked row
 
         """
+
+        ## reset pens
+
+        for p in self.lastClicked:
+            p.resetPen()
+
 
         if event.button() == QtCore.Qt.LeftButton:
             pos = event.pos()
