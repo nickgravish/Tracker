@@ -102,6 +102,22 @@ class HandTrackPoints():
         else:
             self.data = {'': {'x': [], 'y': []}}
 
+    def data_entered(self):
+
+        keys = self.data.keys()
+        if keys != ['']:
+            return True
+
+        vals = 0
+
+        for key in keys:
+            vals += sum([x != -1 for x in self.data[key]['x']])
+
+        if vals > 0:
+            return True
+        else:
+            return False
+
 
     def add_xy_point(self, key = None, x = None, y = None, frame = None):
         if key is not None:
@@ -290,7 +306,8 @@ class VideoStreamView(pg.ImageView):
 
         self.videoname = fname
         self.file_path = os.path.dirname(self.videoname)
-        self.hand_track_file_name = os.path.splitext(os.path.basename(self.videoname))[0] + '_handtrack.json'
+        self.file_name = os.path.splitext(os.path.basename(self.videoname))[0]
+        self.hand_track_file_name = self.file_name + '_handtrack.json'
 
         if type(video) == np.ndarray:
             self.video = video
@@ -313,6 +330,11 @@ class VideoStreamView(pg.ImageView):
         self.hand_track_plot_items = []
         self.association_plot_items = []
 
+
+        self.file_text = pg.TextItem('%s\r\n%s\r\nFrame: %d' % (self.file_name,self.file_path, 0))
+        self.file_text.setParentItem(self.imageItem)
+        self.file_text.setPos(-.2,-.2)
+
         self.contour_plots = pg.PlotDataItem([], [], symbol='o', symbolBrush=None,
                                              symbolPen={'color': 'k', 'width':2},
                                              pen = None, symbolSize = 10)
@@ -327,7 +349,6 @@ class VideoStreamView(pg.ImageView):
 
         self.hand_track_plots.setParentItem(self.imageItem)
         self.hand_track_plots.sigPointsClicked.connect(self.handtrack_clicked)
-
 
         self.hand_tracked_points = HandTrackPoints(num_points=self.NumFrames)
 
@@ -422,8 +443,8 @@ class VideoStreamView(pg.ImageView):
 
         name = os.path.join(self.file_path, self.hand_track_file_name)
 
-        if os.path.exists(name) is True:
-            name = QtGui.QFileDialog.getOpenFileName(self, 'Save File', self.file_path)
+        if os.path.exists(name) is False:
+            name = QtGui.QFileDialog.getOpenFileName(self, 'Open file', self.file_path)
             name = name[0]
 
         print(name)
@@ -629,6 +650,9 @@ class VideoStreamView(pg.ImageView):
 
         self.imageItem.updateImage(self.image)
         self.updatePoints()
+        self.file_text.setText('%s\r\n%s\r\nFrame: %d' %
+                                     (self.file_name,self.file_path, self.currentIndex))
+
         self.ui.roiPlot.show()
 
 
