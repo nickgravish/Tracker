@@ -884,43 +884,6 @@ class VideoStreamView(pg.ImageView):
             print("clicked points", p.pos())
 
         self.lastClicked = points
-    #
-    # def table_click(self):
-    #     element = self.tree.selectionModel().currentIndex()
-    #     var_name = self.tree.item(element.row(), 0).value
-    #     print('var_name')
-    #
-    #     # self.tree.selected_row = element.row()
-    #     # self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
-    #
-    #     self.hand_track_plots.clear()
-    #
-    #     tmp = self.hand_tracked_points.return_items(self.currentIndex)
-    #     var_names = []
-    #     x = []
-    #     y = []
-    #     col = []
-    #
-    #     for element in tmp:
-    #         x_tmp = element['x']
-    #         y_tmp = element['y']
-    #
-    #         if x_tmp != '':
-    #             var_names.append(element['Variable name'])
-    #             x.append(x_tmp)
-    #             y.append(y_tmp)
-    #
-    #             if element['Variable name'] == var_name:
-    #                 col.append('w')
-    #             else:
-    #                 col.append('r')
-    #
-    #     if x and self.handtrack_button.isChecked():
-    #         self.hand_track_plots.setData(x, y, name=var_names, color = col)
-    #
-    #         # self.l = pg.LegendItem()
-    #         # self.l.addItem(self.hand_track_plots)
-    #
 
     def ms_click(self, event):
         """
@@ -963,27 +926,6 @@ class VideoStreamView(pg.ImageView):
 
             elif modifiers == QtCore.Qt.ControlModifier:
                 print('Control+Click')
-
-                # corners = np.array([[x, y]]).astype('float32')
-                # criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)  # for subpixel detector
-                # # dont centroid vertical post
-                # cv.cornerSubPix(self.video[self.currentIndex], corners, (11, 11), (-1, -1), criteria)
-                # x, y = corners[0][0], corners[0][1]
-                #
-                # element = self.tree.selectionModel().currentIndex()
-                #
-                # if element.row() != -1:
-                #     var_name = self.tree.item(element.row(), 0).value
-                #
-                #     self.hand_tracked_points.add_xy_point(key = var_name, x = x, y = y, frame= self.currentIndex)
-                #
-                #     self.updateImage()
-                #     self.tree.selected_row = element.row()
-                #     self.tree.setData(self.hand_tracked_points.return_items(self.currentIndex))
-                #
-                #
-                #     self.sigHandtrackPointValChanged.emit(x,y)
-                #     event.accept()
 
 
             elif modifiers == (QtCore.Qt.ControlModifier |

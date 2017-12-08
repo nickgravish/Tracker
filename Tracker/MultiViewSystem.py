@@ -10,8 +10,8 @@ class MultiViewSystem:
 
     def __init__(self, files):
 
-        self.video1 = Tracker(files[0], verbose='True', frame_range= (1000, 400), min_object_size=20)
-        self.video2 = Tracker(files[1], verbose='True', frame_range= (1000, 400), min_object_size=20)
+        self.video1 = Tracker(files[0], verbose='True', frame_range= (1500, 400), min_object_size=20)
+        self.video2 = Tracker(files[1], verbose='True', frame_range= (1500, 400), min_object_size=20)
 
         self.video1.load_video()
         self.video2.load_video()
@@ -32,9 +32,11 @@ class MultiViewSystem:
         self.camera_extrinsics[self.files[1]] = {}
 
         self.camera_info = dict()
-        self.camera_info[self.files[0]] = {'Resolution': [self.video1.Width, self.video1.Height]}
-        self.camera_info[self.files[1]] = {'Resolution': [self.video2.Width, self.video2.Height]}
+        self.camera_info[self.files[0]] = {'Resolution': (self.video1.Width, self.video1.Height)}
+        self.camera_info[self.files[1]] = {'Resolution': (self.video2.Width, self.video2.Height)}
 
+        self.pattern_size = (4,4)
+        self.pattern_length = 11.5
 
     def get_hand_trackdata(self):
         # self.data[self.files[0]]
@@ -118,7 +120,7 @@ class MultiViewSystem:
         self.layout.addWidget(self.tree, 2, 1)
 
         self.widget.setLayout(self.layout)
-        self.widget.resize(200, 400)
+        self.widget.resize(400, 600)
         self.widget.show()
 
 
@@ -127,8 +129,9 @@ class MultiViewSystem:
         print('Calibrating!')
 
         self.get_hand_trackdata()
-        self.tree.setData(self.data)
         self.calibrate_intrinsics()
+        self.calibrate_extrinsics()
+        self.tree.setData([self.camera_extrinsics, self.camera_intrinsics,self.data])
 
     # write out calibration to JSon file
     def write_intrinsics_to_json(self, P, D, height, width, name):
@@ -151,53 +154,192 @@ class MultiViewSystem:
         print("total error: ", tot_error / len(oP))
         return tot_error / len(oP)
 
+    def compute_rmse_stereo(self, iP1, iP2, cam_system1, cam_system2):
+        '''
+            Compute the reprojection error from a stereo projection. 
+            Returned units are in pixels
+        '''
+
+        pterr = []
+
+        tot_error1 = 0
+        tot_error2 = 0
+        for i in range(len(iP1)):
+            xyz = cv.triangulatePoints(np.array(cam_system1['projection_matrix']),
+                                        np.array(cam_system2['projection_matrix']), iP1[i], iP2[i])
+
+            iP1_repro, _ = cv.projectPoints(np.array([np.squeeze(xyz[:-1:1] / xyz[3])]), np.array(cam_system1['Q']),
+                                             np.array(cam_system1['translation']), np.array(cam_system1['K']),
+                                             np.array(cam_system1['D']))
+
+            iP2_repro, _ = cv.projectPoints(np.array([np.squeeze(xyz[:-1:1] / xyz[3])]), np.array(cam_system2['Q']),
+                                             np.array(cam_system2['translation']), np.array(cam_system2['K']),
+                                             np.array(cam_system2['D']))
+
+            # watch out here because pytohn will silently broadcast this subtraction and give wrong error results.
+            # Because opencv returns annoying list of list
+            iP1_err = np.sqrt(np.sum((iP1_repro - iP1[i]) ** 2))
+            iP2_err = np.sqrt(np.sum((iP2_repro - iP2[i]) ** 2))
+
+            tot_error1 += iP1_err
+            tot_error2 += iP2_err
+
+            pterr.append(iP1_err)
+
+        print("total error %s: %d" % (self.files[0], tot_error1 / len(iP1)))
+        print("total error %s: %d" % (self.files[1], tot_error2 / len(iP1)))
+
+        return pterr
+
     def calibrate_intrinsics(self):
-        pattern_size = (4,4)
-        pattern_length = 11.5 #mm
 
         # isolate the object points
-        checkerBoardPoints = np.zeros((pattern_size[0] * pattern_size[1], 3),  dtype='float32')
-        for kk in range(pattern_size[1]):
-            for jj in range(pattern_size[0]):
-                checkerBoardPoints[kk * pattern_size[0] + jj] = [kk * pattern_length, jj * pattern_length, 0] #x, y, z
+        checkerBoardPoints = np.zeros((self.pattern_size[0] * self.pattern_size[1], 3),  dtype='float32')
+        for kk in range(self.pattern_size[1]):
+            for jj in range(self.pattern_size[0]):
+                checkerBoardPoints[kk * self.pattern_size[0] + jj] = \
+                    [jj * self.pattern_length, kk * self.pattern_length, 0] #x, y, z
 
-        for camname, camdata in data.items():
+        for camname, camdata in self.data.items():
             object_points = []
             camera_points = []
 
             for frame, points in camdata.items():
-                objp = [checkerBoardPoints[ptname] for ptname,_ in points.items()]
-                object_points.append(objp)
 
-                campts = [val for _,val in points.items()]
-                camera_points.append(campts)
+                campts = np.array([np.array(val, dtype='float32') for _,val in points.items()], dtype='float32')
 
-            # object_points = np.array(object_points)
-            # object_points = object_points.astype('float32')
-            # camera_points = np.array(camera_points)
-            # camera_points = camera_points.astype('float32')
+                # only use views where all calibs can be seen
+                if campts.shape[0] == self.pattern_size[0]*self.pattern_size[1]:
+                    objp = [checkerBoardPoints[ptname] for ptname,_ in points.items()]
 
-            if object_points:
+                    object_points.append(objp)
+                    camera_points.append(campts)
 
-                ret, P, D, R, translation = cv.calibrateCamera([object_points], [camera_points], camera_info[camname]['Resolution'],
+            object_points = np.array(object_points)
+            object_points = object_points.astype('float32')
+            camera_points = np.array(camera_points)
+            camera_points = camera_points.astype('float32')
+
+            if object_points.shape[0] > 0:
+
+                ret, P, D, R, T = cv.calibrateCamera(object_points, camera_points,
+                                                               tuple(self.camera_info[camname]['Resolution']),
                                                                 None, None, None, None,
-                                                                calibration_criteria)
+                                                                self.calibration_criteria)
 
-                rmse = self.compute_rmse_fromcv(oP, iP, P, D, translation, R)
-                print(rmse)
+                print('Cam %s' % camname)
+                rmse = self.compute_rmse_fromcv(object_points, camera_points, P, D, T, R)
 
-
-
-            # self.write_intrinsics_to_json(P, D, resolution[cam][0], resolution[cam][1], \
-            #                          os.path.join(basedir, calib_video[cam] + 'CALIB.txt'))
-
-
+                self.camera_intrinsics[camname]['Projection'] = P
+                self.camera_intrinsics[camname]['Distortion'] = D
+                self.camera_intrinsics[camname]['Rotation'] = R
+                self.camera_intrinsics[camname]['Translation'] = T
 
 
+    def calibrate_extrinsics(self):
 
+        camera_matrix_1 = self.camera_intrinsics[self.files[0]]['Projection']
+        camera_matrix_2 = self.camera_intrinsics[self.files[1]]['Projection']
 
+        dist_coeff_1 = self.camera_intrinsics[self.files[0]]['Distortion']
+        dist_coeff_2 = self.camera_intrinsics[self.files[1]]['Distortion']
 
-print("test")
+        # isolate the object points
+        checkerBoardPoints = np.zeros((self.pattern_size[0] * self.pattern_size[1], 3), dtype='float32')
+        for kk in range(self.pattern_size[1]):
+            for jj in range(self.pattern_size[0]):
+                checkerBoardPoints[kk * self.pattern_size[0] + jj] = \
+                    [jj * self.pattern_length, kk * self.pattern_length, 0]  # x, y, z
+
+        cp = []
+        for camname, camdata in self.data.items():
+            object_points = []
+            camera_points = []
+
+            for frame, points in camdata.items():
+                if frame == 111:
+                    campts = np.array([np.array(val, dtype='float32') for _, val in points.items()], dtype='float32')
+
+                    # only use views where all calibs can be seen
+                    if campts.shape[0] == self.pattern_size[0] * self.pattern_size[1]:
+                        objp = [checkerBoardPoints[ptname] for ptname, _ in points.items()]
+
+                        object_points.append(objp)
+                        camera_points.append(campts)
+
+                    else:
+                        object_points.append([])
+                        camera_points.append([])
+
+            cp.append(camera_points)
+
+        camera_points1 = []
+        camera_points2 = []
+        object_points_out = []
+        for cp1, cp2, op in zip(cp[0], cp[1], object_points):
+            tmp1 = []
+            tmp2 = []
+            tmp3 = []
+            for pt1, pt2, obj in zip(cp1, cp2, op):
+                if (len(pt1) > 0) & (len(pt2) > 0):
+                    tmp1.append(pt1)
+                    tmp2.append(pt2)
+                    tmp3.append(obj)
+
+            if len(tmp1) > 0:
+                camera_points1.append(tmp1)
+                camera_points2.append(tmp2)
+                object_points_out.append(tmp3)
+
+        camera_points1 = np.array(camera_points1, dtype='float32')
+        camera_points2 = np.array(camera_points2, dtype='float32')
+        object_points_out = np.array(object_points_out, dtype='float32')
+
+        retval, cameraMatrix1, distCoeffs1, cameraMatrix2, distCoeffs2, R, T, E, F = \
+            cv.stereoCalibrate(object_points_out, camera_points1, camera_points2,
+                               camera_matrix_1, dist_coeff_1, camera_matrix_2,
+                               dist_coeff_2, camera_info[self.files[0]]['Resolution'],
+                               self.calibration_criteria)
+
+        projection_matrix1 = np.array(
+            np.matrix(cameraMatrix1) * np.matrix(np.append(np.eye(3), np.zeros((3, 1)), axis=1)))
+        projection_matrix2 = np.array(np.matrix(cameraMatrix2) * np.matrix(np.append(R, T, axis=1)))
+
+        cam_system1 = {'P': np.append(cameraMatrix1, [[0], [0], [0]], axis=1)}
+        cam_system1['projection_matrix'] = projection_matrix1
+        cam_system1['Q'] = np.eye(3)
+        cam_system1['translation'] = np.zeros((3, 1))
+        cam_system1['K'] = cameraMatrix1
+        cam_system1['D'] = distCoeffs1
+
+        cam_system2 = {'P': np.append(cameraMatrix2, [[0], [0], [0]], axis=1)}
+        cam_system2['projection_matrix'] = projection_matrix2
+        cam_system2['Q'] = R
+        cam_system2['translation'] = T
+        cam_system2['K'] = cameraMatrix2
+        cam_system2['D'] = distCoeffs2
+
+        self.camera_extrinsics = [{'projection_matrix': projection_matrix1.tolist(),
+                                'P': np.append(cameraMatrix1, [[0], [0], [0]], axis=1).tolist(),
+                                'K': camera_matrix_1.tolist(),
+                                'D': dist_coeff_1.tolist(),
+                                'R': np.eye(3).tolist(),
+                                'Q': np.eye(3).tolist(),
+                                'translation': np.squeeze(np.zeros((3, 1))).tolist(),
+                                'name': 'cam1'}]
+        self.camera_extrinsics.append({'projection_matrix': projection_matrix2.tolist(),
+                                    'P': np.append(cameraMatrix2, [[0], [0], [0]], axis=1).tolist(),
+                                    'K': cameraMatrix2.tolist(),
+                                    'D': distCoeffs2.tolist(),
+                                    'R': np.eye(3).tolist(),  # no rectification matrix
+                                    'Q': R.tolist(),
+                                    'translation': np.squeeze(T).tolist(),
+                                    'name': 'cam' + str(jj + 1)})
+
+        print('\r\nAll the points in images\r\n')
+        pterr = self.compute_rmse_stereo(np.reshape(camera_points1, (16 * camera_points1.shape[0], 2)),
+                                      np.reshape(camera_points2, (16 * camera_points2.shape[0], 2)),
+                                      cam_system1, cam_system2)
 
 
 class MultiDataView():
