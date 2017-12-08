@@ -186,8 +186,8 @@ class MultiViewSystem:
 
             pterr.append(iP1_err)
 
-        print("total error %s: %d" % (self.files[0], tot_error1 / len(iP1)))
-        print("total error %s: %d" % (self.files[1], tot_error2 / len(iP1)))
+        print("total error %s: %f" % (self.files[0], tot_error1 / len(iP1)))
+        print("total error %s: %f" % (self.files[1], tot_error2 / len(iP1)))
 
         return pterr
 
@@ -257,19 +257,19 @@ class MultiViewSystem:
             camera_points = []
 
             for frame, points in camdata.items():
-                if frame == 111:
-                    campts = np.array([np.array(val, dtype='float32') for _, val in points.items()], dtype='float32')
 
-                    # only use views where all calibs can be seen
-                    if campts.shape[0] == self.pattern_size[0] * self.pattern_size[1]:
-                        objp = [checkerBoardPoints[ptname] for ptname, _ in points.items()]
+                campts = np.array([np.array(val, dtype='float32') for _, val in points.items()], dtype='float32')
 
-                        object_points.append(objp)
-                        camera_points.append(campts)
+                # only use views where all calibs can be seen
+                if campts.shape[0] == self.pattern_size[0] * self.pattern_size[1]:
+                    objp = [checkerBoardPoints[ptname] for ptname, _ in points.items()]
 
-                    else:
-                        object_points.append([])
-                        camera_points.append([])
+                    object_points.append(objp)
+                    camera_points.append(campts)
+
+                else:
+                    object_points.append([])
+                    camera_points.append([])
 
             cp.append(camera_points)
 
@@ -298,7 +298,7 @@ class MultiViewSystem:
         retval, cameraMatrix1, distCoeffs1, cameraMatrix2, distCoeffs2, R, T, E, F = \
             cv.stereoCalibrate(object_points_out, camera_points1, camera_points2,
                                camera_matrix_1, dist_coeff_1, camera_matrix_2,
-                               dist_coeff_2, camera_info[self.files[0]]['Resolution'],
+                               dist_coeff_2, self.camera_info[self.files[0]]['Resolution'],
                                self.calibration_criteria)
 
         projection_matrix1 = np.array(
@@ -341,6 +341,7 @@ class MultiViewSystem:
                                       np.reshape(camera_points2, (16 * camera_points2.shape[0], 2)),
                                       cam_system1, cam_system2)
 
+        return camera_points1, camera_points2, object_points_out
 
 class MultiDataView():
     def __init__(self, video,
