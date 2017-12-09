@@ -10,8 +10,8 @@ class MultiViewSystem:
 
     def __init__(self, files):
 
-        self.video1 = Tracker(files[0], verbose='True', frame_range= (1500, 400), min_object_size=20)
-        self.video2 = Tracker(files[1], verbose='True', frame_range= (1500, 400), min_object_size=20)
+        self.video1 = Tracker(files[0], verbose='True', frame_range= (1000, 1000), min_object_size=20)
+        self.video2 = Tracker(files[1], verbose='True', frame_range= (1000, 1000), min_object_size=20)
 
         self.video1.load_video()
         self.video2.load_video()
