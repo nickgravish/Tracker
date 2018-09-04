@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 
-sys.path.append('/Users/nickgravish/Dropbox/Python/')
+# sys.path.append('/Users/nickgravish/Dropbox/Python/')
 import opencv_helper.opencv_helper as cvhlp
 
 import pyqtgraph as pg
