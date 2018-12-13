@@ -172,11 +172,11 @@ class Tracker:
             self.exit_error()
             raise IOError('Codec issue: cannot read number of frames.')
 
-        self.Height = self.vid.get(cv.CAP_PROP_FRAME_HEIGHT)
-        self.Width = self.vid.get(cv.CAP_PROP_FRAME_WIDTH)
+        self.Height = int(self.vid.get(cv.CAP_PROP_FRAME_HEIGHT))
+        self.Width = int(self.vid.get(cv.CAP_PROP_FRAME_WIDTH))
 
         if self.frame_range is None:
-            self.frame_range = (0, self.NumFrames)
+            self.frame_range = (int(0), int(self.NumFrames))
         else:
             # check doesn't exceed number of frames
             if self.frame_range[0] + self.frame_range[1] > self.NumFrames:
@@ -197,8 +197,9 @@ class Tracker:
                 self.ROI_Width = self.ROI[3] - self.ROI[1]
                 self.ROI_Height = self.ROI[2] - self.ROI[0]
 
-                if self.verbose:
-                    print(self.ROI_Height, self.ROI_Width)
+
+        if self.verbose:
+            print(self.ROI_Height, self.ROI_Width)
 
         self.frames = np.zeros((self.frame_range[1], self.ROI_Height, self.ROI_Width), np.uint8)
         self.background = None
@@ -304,29 +305,29 @@ class Tracker:
 
         # self.contours = []
 
-        # if self.trk_method == 'sklearn':
-        #     self.raw_contours = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
-        #     for objects in self.frames_objs:
-        #         data = []
-        #
-        #         for object in objects:
-        #             if(object.area > self.min_object_size):
-        #                 x = object.centroid[0]
-        #                 y = object.centroid[1]
-        #                 area = object.area
-        #                 angle = object.orientation
-        #                 ecc = object.eccentricity
-        #                 major_axis = object.major_axis_length
-        #                 minor_axis = object.minor_axis_length
-        #                 bbox = object.bbox
-        #
-        #                 data.append({'x': x, 'y': y, 'area': area,
-        #                              'ecc': ecc, 'angle': angle,
-        #                              'major_axis': major_axis,
-        #                              'minor_axis': minor_axis,
-        #                              'bbox': bbox})
-        #
-        #         self.contours.append(data)
+        if self.trk_method == 'sklearn':
+            self.raw_contours = [regionprops(label(frame, connectivity=1)) for frame in self.frames_BW]
+            for objects in self.frames_objs:
+                data = []
+
+                for object in objects:
+                    if(object.area > self.min_object_size):
+                        x = object.centroid[0]
+                        y = object.centroid[1]
+                        area = object.area
+                        angle = object.orientation
+                        ecc = object.eccentricity
+                        major_axis = object.major_axis_length
+                        minor_axis = object.minor_axis_length
+                        bbox = object.bbox
+
+                        data.append({'x': x, 'y': y, 'area': area,
+                                     'ecc': ecc, 'angle': angle,
+                                     'major_axis': major_axis,
+                                     'minor_axis': minor_axis,
+                                     'bbox': bbox})
+
+                self.contours.append(data)
 
         elif self.trk_method == 'opencv':
             self.raw_contours = [cv.findContours(np.uint8(frame), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)[1] for frame in self.frames_BW]
